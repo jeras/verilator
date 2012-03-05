@@ -34,14 +34,14 @@ module t (/*AUTOARG*/
 
   // finish report
   always @ (posedge clk)
-  if ((cnt[30:2]==(NO-1)) && (cnt[1:0]==2'd3)) begin
+  if ((cnt[30:2]==NO) && (cnt[1:0]==2'd0)) begin
     $write("*-* All Finished *-*\n");
     $finish;
   end
 
   always @ (posedge clk)
   if (cnt[1:0]==2'd0) begin
-    // initialize to defaault
+    // initialize to defaaults (all bits to x)
     if      (cnt[30:2]==0)  array_bg <=  {WA  *WB{1'bx}   };
     else if (cnt[30:2]==1)  array_bg <=  {WA{ {WB{1'bx}} }};
     else if (cnt[30:2]==2)  array_bg <=  {WA{ {WB{1'bx}} }};
@@ -52,9 +52,8 @@ module t (/*AUTOARG*/
     else if (cnt[30:2]==7)  array_bg <=  {WA{ {WB{1'bx}} }};
     else if (cnt[30:2]==8)  array_bg <=  {WA{ {WB{1'bx}} }};
     else if (cnt[30:2]==9)  array_bg <=  {WA{ {WB{1'bx}} }};
-//    else if (cnt[30:2]==2)  array_bg <= '{WA{'{WB{1'bx}} }};
-//    else if (cnt[30:2]==3)  array_bg <= '{WA{ {WB{1'bx}} }};
   end else if (cnt[1:0]==2'd1) begin
+    // write value to array
     if      (cnt[30:2]==0)  begin end
     else if (cnt[30:2]==1)  array_bg                            = {WA  *WB  +0{1'b1}};
     else if (cnt[30:2]==2)  array_bg [WA/2-1:0   ]              = {WA/2*WB  +0{1'b1}};
@@ -66,6 +65,7 @@ module t (/*AUTOARG*/
     else if (cnt[30:2]==8)  array_bg [       0   ][       0   ] = {1   *1   +0{1'b1}};
     else if (cnt[30:2]==9)  array_bg [WA  -1     ][WB  -1     ] = {1   *1   +0{1'b1}};
   end else if (cnt[1:0]==2'd2) begin
+    // check array value
     if      (cnt[30:2]==0)  begin if (array_bg !== 64'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx) $stop(); end
     else if (cnt[30:2]==1)  begin if (array_bg !== 64'b1111111111111111111111111111111111111111111111111111111111111111) $stop(); end
     else if (cnt[30:2]==2)  begin if (array_bg !== 64'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx11111111111111111111111111111111) $stop(); end
@@ -76,6 +76,8 @@ module t (/*AUTOARG*/
     else if (cnt[30:2]==7)  begin if (array_bg !== 64'b1111xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx) $stop(); end
     else if (cnt[30:2]==8)  begin if (array_bg !== 64'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1) $stop(); end
     else if (cnt[30:2]==9)  begin if (array_bg !== 64'b1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx) $stop(); end
+  end else if (cnt[1:0]==2'd2) begin
+    // read value from array
   end
 
 endmodule

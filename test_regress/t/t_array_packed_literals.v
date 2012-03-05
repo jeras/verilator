@@ -17,7 +17,7 @@ module t (/*AUTOARG*/
   localparam NO = 7;  // number of access events
 
   // 2D packed arrays
-  logic        [WA-1:0] [WB-1:0] array_bg;  // big endian array
+  logic [WA-1:0] [WB-1:0] array_bg;  // big endian array
 
   integer cnt = 0;
 
@@ -36,7 +36,7 @@ module t (/*AUTOARG*/
 
   always @ (posedge clk)
   if (cnt[1:0]==2'd0) begin
-    // initialize to defaault
+    // initialize to defaults (all bits 1'bx)
     if      (cnt[30:2]==0)  array_bg <=  {WA{ {WB{1'bx}} }};
     else if (cnt[30:2]==1)  array_bg <=  {WA{ {WB{1'bx}} }};
     else if (cnt[30:2]==2)  array_bg <=  {WA{ {WB{1'bx}} }};
@@ -44,6 +44,7 @@ module t (/*AUTOARG*/
     else if (cnt[30:2]==4)  array_bg <=  {WA{ {WB{1'bx}} }};
     else if (cnt[30:2]==5)  array_bg <=  {WA{ {WB{1'bx}} }};
   end else if (cnt[1:0]==2'd1) begin
+    // write data into whole or part of the array using literals
     if      (cnt[30:2]==0)  begin end
     else if (cnt[30:2]==1)  array_bg                            = '{ 3 ,2 ,1, 0 };
     else if (cnt[30:2]==2)  array_bg                            = '{WA  {          {WB/2  {2'b10}}  }};
@@ -52,6 +53,7 @@ module t (/*AUTOARG*/
     else if (cnt[30:2]==5)  array_bg [WA/2-1:0   ]              = '{WA/2{          {WB/2  {2'b10}}  }};
     else if (cnt[30:2]==6)  array_bg [WA  -1:WA/2]              = '{WA/2{          {WB/2  {2'b01}}  }};
   end else if (cnt[1:0]==2'd2) begin
+    // chack array agains expected value
     if      (cnt[30:2]==0)  begin if (array_bg !== 16'bxxxxxxxxxxxxxxxx) begin $display("%b", array_bg); $stop(); end end
     else if (cnt[30:2]==1)  begin if (array_bg !== 16'b0011001000010000) begin $display("%b", array_bg); $stop(); end end
     else if (cnt[30:2]==2)  begin if (array_bg !== 16'b1010101010101010) begin $display("%b", array_bg); $stop(); end end
