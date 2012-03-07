@@ -4,9 +4,9 @@
 // without warranty, 2009 by Iztok Jeras.
 
 module t (/*AUTOARG*/
-  // Inputs
-  clk
-);
+   // Inputs
+   clk
+   );
 
    input clk;
 
