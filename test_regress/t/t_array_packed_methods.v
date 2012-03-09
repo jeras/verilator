@@ -44,19 +44,19 @@ module t (/*AUTOARG*/
    begin
       // slicing tipe counter
       case (cnt[3:2])
-         2'd0   : begin  slc = 0;  end  // full array
-         2'd1   : begin  slc = 1;  end  // half array
-         2'd2   : begin  slc = 2;  end  // single array element
-         default: begin  slc = 0;  end
+         2'd0   : begin  slc <= 0;  end  // full array
+         2'd1   : begin  slc <= 1;  end  // half array
+         2'd2   : begin  slc <= 2;  end  // single array element
+         default: begin  slc <= 0;  end
       endcase
       // dimmension counter
       case (cnt[1:0])
-         2'd0   : begin  dim = 1;  wdt = (slc==1) ? WA/2
-                                       : (slc==2) ? 1
-                                       : WA;  end
-         2'd1   : begin  dim = 2;  wdt = WB;  end
-         2'd2   : begin  dim = 3;  wdt = WC;  end
-         default: begin  dim = 0;  wdt = 0;   end
+         2'd0   : begin  dim <= 1;  wdt = (slc==1) ? WA/2
+                                        : (slc==2) ? 1
+                                        : WA;  end
+         2'd1   : begin  dim <= 2;  wdt = WB;  end
+         2'd2   : begin  dim <= 3;  wdt = WC;  end
+         default: begin  dim <= 0;  wdt = 0;   end
       endcase
    end
 

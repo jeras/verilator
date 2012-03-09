@@ -54,15 +54,15 @@ module t (/*AUTOARG*/
    end else if (cnt[1:0]==2'd1) begin
       // write data into whole or part of the array using literals
       if      (cnt[30:2]==0)  begin end
-      else if (cnt[30:2]==1)  array_bg               = '{ 3 ,2 ,1, 0 };
-      else if (cnt[30:2]==2)  array_bg               = '{0:4, 1:5, 2:6, 3:7};
-      else if (cnt[30:2]==3)  array_bg               = '{default:13};
-      else if (cnt[30:2]==4)  array_bg               = '{2:15, default:13};
-      else if (cnt[30:2]==5)  array_bg               = '{WA  {          {WB/2  {2'b10}}  }};
-      else if (cnt[30:2]==6)  array_bg               = '{WA  { {3'b101, {WB/2-1{2'b10}}} }};
-      else if (cnt[30:2]==7)  array_bg               = '{WA  {          {WB/2-1{2'b10}}  }};
-      else if (cnt[30:2]==8)  array_bg [WA/2-1:0   ] = '{WA/2{          {WB/2  {2'b10}}  }};
-      else if (cnt[30:2]==9)  array_bg [WA  -1:WA/2] = '{WA/2{          {WB/2  {2'b01}}  }};
+      else if (cnt[30:2]==1)  array_bg               <= '{ 3 ,2 ,1, 0 };
+      else if (cnt[30:2]==2)  array_bg               <= '{0:4, 1:5, 2:6, 3:7};
+      else if (cnt[30:2]==3)  array_bg               <= '{default:13};
+      else if (cnt[30:2]==4)  array_bg               <= '{2:15, default:13};
+      else if (cnt[30:2]==5)  array_bg               <= '{WA  {          {WB/2  {2'b10}}  }};
+      else if (cnt[30:2]==6)  array_bg               <= '{WA  { {3'b101, {WB/2-1{2'b10}}} }};
+      else if (cnt[30:2]==7)  array_bg               <= '{WA  {          {WB/2-1{2'b10}}  }};
+      else if (cnt[30:2]==8)  array_bg [WA/2-1:0   ] <= '{WA/2{          {WB/2  {2'b10}}  }};
+      else if (cnt[30:2]==9)  array_bg [WA  -1:WA/2] <= '{WA/2{          {WB/2  {2'b01}}  }};
    end else if (cnt[1:0]==2'd2) begin
       // chack array agains expected value
       if      (cnt[30:2]==0)  begin if (array_bg !== 16'bxxxxxxxxxxxxxxxx) begin $display("%b", array_bg); $stop(); end end
@@ -94,15 +94,15 @@ module t (/*AUTOARG*/
    end else if (cnt[1:0]==2'd1) begin
       // write data into whole or part of the array using literals
       if      (cnt[30:2]==0)  begin end
-      else if (cnt[30:2]==1)  array_lt               = '{ 3 ,2 ,1, 0 };
-      else if (cnt[30:2]==2)  array_lt               = '{3:4, 2:5, 1:6, 0:7};
-      else if (cnt[30:2]==3)  array_lt               = '{default:13};
-      else if (cnt[30:2]==4)  array_lt               = '{1:15, default:13};
-      else if (cnt[30:2]==5)  array_lt               = '{WA  {          {WB/2  {2'b10}}  }};
-      else if (cnt[30:2]==6)  array_lt               = '{WA  { {3'b101, {WB/2-1{2'b10}}} }};
-      else if (cnt[30:2]==7)  array_lt               = '{WA  {          {WB/2-1{2'b10}}  }};
-      else if (cnt[30:2]==8)  array_lt [0   :WA/2-1] = '{WA/2{          {WB/2  {2'b10}}  }};
-      else if (cnt[30:2]==9)  array_lt [WA/2:WA  -1] = '{WA/2{          {WB/2  {2'b01}}  }};
+      else if (cnt[30:2]==1)  array_lt               <= '{ 3 ,2 ,1, 0 };
+      else if (cnt[30:2]==2)  array_lt               <= '{3:4, 2:5, 1:6, 0:7};
+      else if (cnt[30:2]==3)  array_lt               <= '{default:13};
+      else if (cnt[30:2]==4)  array_lt               <= '{1:15, default:13};
+      else if (cnt[30:2]==5)  array_lt               <= '{WA  {          {WB/2  {2'b10}}  }};
+      else if (cnt[30:2]==6)  array_lt               <= '{WA  { {3'b101, {WB/2-1{2'b10}}} }};
+      else if (cnt[30:2]==7)  array_lt               <= '{WA  {          {WB/2-1{2'b10}}  }};
+      else if (cnt[30:2]==8)  array_lt [0   :WA/2-1] <= '{WA/2{          {WB/2  {2'b10}}  }};
+      else if (cnt[30:2]==9)  array_lt [WA/2:WA  -1] <= '{WA/2{          {WB/2  {2'b01}}  }};
    end else if (cnt[1:0]==2'd2) begin
       // chack array agains expected value
       if      (cnt[30:2]==0)  begin if (array_lt !== 16'bxxxxxxxxxxxxxxxx) begin $display("%b", array_lt); $stop(); end end
