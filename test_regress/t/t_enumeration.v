@@ -15,7 +15,7 @@ module t (/*AUTOARG*/
 
    // event counter
    always @ (posedge clk)
-   if (cnt==10) begin
+   if (cnt==20) begin
       cnt <= 0;
       mod <= mod + 1;
    end else begin
@@ -37,7 +37,7 @@ module t (/*AUTOARG*/
    t_switch switch;
 
    // numbering examples
-   enum int {father, mother, son[2], doughter, gerbil, dog[3]=10, cat[2:5]=20, car[3:1]=30} family;
+   enum integer {father, mother, son[2], daughter, gerbil, dog[3]=10, cat[3:5]=20, car[3:1]=30} family;
 
    // test of raibow7 type
    always @ (posedge clk)
@@ -97,8 +97,7 @@ module t (/*AUTOARG*/
          if (rainbow7.name() != "red"   ) begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.next();
       end
-   end
-   else if (mod==1) begin
+   end else if (mod==1) begin
       // write value to array
       if      (cnt== 0)  begin
          rainbow7 <= rainbow7.last();
@@ -210,4 +209,105 @@ module t (/*AUTOARG*/
       end
    end
 
+   // test of raibow7 type
+   always @ (posedge clk)
+   if (mod==0) begin
+      // write value to array
+      if      (cnt== 0)  begin
+         family <= family.first();
+         // check number
+         if (family.num()  !== 15       ) begin $display("%d", family.num() ); $stop(); end
+         if (family        !== 32'dx    ) begin $display("%b", family       ); $stop(); end
+      end
+      else if (cnt== 1)  begin
+         if (family        !== 0        ) begin $display("%b", family       ); $stop(); end
+         if (family        !== father   ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "father"  ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 2)  begin
+         if (family        !== 1        ) begin $display("%b", family       ); $stop(); end
+         if (family        !== mother   ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "mother"  ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 3)  begin
+         if (family        !== 2        ) begin $display("%b", family       ); $stop(); end
+         if (family        !== son0     ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "son0"    ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 4)  begin
+         if (family        !== 3        ) begin $display("%b", family       ); $stop(); end
+         if (family        !== son1     ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "son1"    ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 5)  begin
+         if (family        !== 4        ) begin $display("%b", family       ); $stop(); end
+         if (family        !== daughter ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "daughter") begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 6)  begin
+         if (family        !== 5        ) begin $display("%b", family       ); $stop(); end
+         if (family        !== gerbil   ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "gerbil"  ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 7)  begin
+         if (family        !== 10       ) begin $display("%b", family       ); $stop(); end
+         if (family        !== dog0     ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "dog0"    ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 8)  begin
+         if (family        !== 11       ) begin $display("%b", family       ); $stop(); end
+         if (family        !== dog1     ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "dog1"    ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 9)  begin
+         if (family        !== 12       ) begin $display("%b", family       ); $stop(); end
+         if (family        !== dog2     ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "dog2"    ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 10)  begin
+         if (family        !== 20       ) begin $display("%b", family       ); $stop(); end
+         if (family        !== cat3     ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "cat3"    ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 11)  begin
+         if (family        !== 21       ) begin $display("%b", family       ); $stop(); end
+         if (family        !== cat4     ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "cat4"    ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 12)  begin
+         if (family        !== 22       ) begin $display("%b", family       ); $stop(); end
+         if (family        !== cat5     ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "cat5"    ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 13)  begin
+         if (family        !== 30       ) begin $display("%b", family       ); $stop(); end
+         if (family        !== car3     ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "car3"    ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 14)  begin
+         if (family        !== 31       ) begin $display("%b", family       ); $stop(); end
+         if (family        !== car2     ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "car2"    ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+      else if (cnt== 15)  begin
+         if (family        !== 32       ) begin $display("%b", family       ); $stop(); end
+         if (family        !== car1     ) begin $display("%b", family       ); $stop(); end
+         if (family.name() != "car1"    ) begin $display("%s", family.name()); $stop(); end
+         family <= family.next();
+      end
+   end
 endmodule
