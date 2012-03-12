@@ -30,8 +30,10 @@ module t (/*AUTOARG*/);
 
    // Declarations using var
    var byte 	v_b;
+`ifndef VCS
    var [2:0] 	v_b3;
    var signed [2:0] v_bs;
+`endif
 
    // verilator lint_off WIDTH
    localparam 		p_implicit = {96{1'b1}};
@@ -44,10 +46,26 @@ module t (/*AUTOARG*/);
    localparam reg 	p_reg	= {96{1'b1}};
    localparam bit 	p_bit	= {96{1'b1}};
    localparam logic 	p_logic	= {96{1'b1}};
+   localparam reg [0:0]	p_reg1	= {96{1'b1}};
+   localparam bit [0:0]	p_bit1	= {96{1'b1}};
+   localparam logic [0:0] p_logic1= {96{1'b1}};
    localparam reg [1:0]	p_reg2	= {96{1'b1}};
    localparam bit [1:0]	p_bit2	= {96{1'b1}};
    localparam logic [1:0] p_logic2= {96{1'b1}};
    // verilator lint_on WIDTH
+
+   byte		v_byte[2];
+   shortint	v_shortint[2];
+   int		v_int[2];
+   longint	v_longint[2];
+   integer	v_integer[2];
+   time		v_time[2];
+   chandle	v_chandle[2];
+   bit		v_bit[2];
+   logic	v_logic[2];
+   reg		v_reg[2];
+   real		v_real[2];
+   realtime	v_realtime[2];
 
    // We do this in two steps so we can check that initialization inside functions works properly
    // verilator lint_off WIDTH
@@ -61,6 +79,9 @@ module t (/*AUTOARG*/);
    function reg 	f_reg;		reg 		lv_reg;		f_reg	 	= lv_reg;	endfunction
    function bit 	f_bit;		bit 		lv_bit;		f_bit	 	= lv_bit;	endfunction
    function logic 	f_logic;	logic 		lv_logic;	f_logic		= lv_logic;	endfunction
+   function reg [0:0]	f_reg1;		reg [0:0]	lv_reg1;	f_reg1	 	= lv_reg1;	endfunction
+   function bit [0:0]	f_bit1;		bit [0:0]	lv_bit1;	f_bit1	 	= lv_bit1;	endfunction
+   function logic [0:0] f_logic1;	logic [0:0] 	lv_logic1;	f_logic1	= lv_logic1;	endfunction
    function reg [1:0]	f_reg2;		reg [1:0]	lv_reg2;	f_reg2	 	= lv_reg2;	endfunction
    function bit [1:0]	f_bit2;		bit [1:0]	lv_bit2;	f_bit2	 	= lv_bit2;	endfunction
    function logic [1:0] f_logic2;	logic [1:0] 	lv_logic2;	f_logic2	= lv_logic2;	endfunction
@@ -107,25 +128,56 @@ module t (/*AUTOARG*/);
       // verilator lint_on UNSIGNED
 
       // Can't CHECK_ALL(d_chandle), as many operations not legal on chandles
+`ifdef VERILATOR  // else indeterminate
       if ($bits(d_chandle) !== 64) $stop;
+`endif
 
 `define CHECK_P(name,nbits) \
    if (name !== {(nbits){1'b1}}) begin $display("%%Error: Bad size for %s",`"name`"); $stop; end \
 
       //       name              b
       `CHECK_P(p_implicit	,96);
+      `CHECK_P(p_implicit[0]	,1 );
       `CHECK_P(p_explicit	,90);
+      `CHECK_P(p_explicit[0]	,1 );
       `CHECK_P(p_byte		,8 );
+      `CHECK_P(p_byte[0]	,1 );
       `CHECK_P(p_shortint	,16);
+      `CHECK_P(p_shortint[0]	,1 );
       `CHECK_P(p_int		,32);
+      `CHECK_P(p_int[0]		,1 );
       `CHECK_P(p_longint	,64);
+      `CHECK_P(p_longint[0]	,1 );
       `CHECK_P(p_integer	,32);
+      `CHECK_P(p_integer[0]	,1 );
       `CHECK_P(p_bit		,1 );
       `CHECK_P(p_logic		,1 );
       `CHECK_P(p_reg		,1 );
+      `CHECK_P(p_bit1		,1 );
+      `CHECK_P(p_logic1		,1 );
+      `CHECK_P(p_reg1		,1 );
+      `CHECK_P(p_bit1[0]	,1 );
+      `CHECK_P(p_logic1[0]	,1 );
+      `CHECK_P(p_reg1[0]	,1 );
       `CHECK_P(p_bit2		,2 );
       `CHECK_P(p_logic2		,2 );
       `CHECK_P(p_reg2		,2 );
+
+`define CHECK_B(varname,nbits) \
+   if ($bits(varname) !== nbits) begin $display("%%Error: Bad size for %s",`"varname`"); $stop; end \
+
+      `CHECK_B(v_byte[1]	,8 );
+      `CHECK_B(v_shortint[1]	,16);
+      `CHECK_B(v_int[1]		,32);
+      `CHECK_B(v_longint[1]	,64);
+      `CHECK_B(v_integer[1]	,32);
+      `CHECK_B(v_time[1]	,64);
+       //`CHECK_B(v_chandle[1]
+      `CHECK_B(v_bit[1]		,1 );
+      `CHECK_B(v_logic[1]	,1 );
+      `CHECK_B(v_reg[1]		,1 );
+      //`CHECK_B(v_real[1]	,64);	// $bits not allowed
+      //`CHECK_B(v_realtime[1]	,64);	// $bits not allowed
 
 `define CHECK_F(fname,nbits,zeroinit) \
    if ($bits(fname()) !== nbits) begin $display("%%Error: Bad size for %s",`"fname`"); $stop; end \
@@ -139,10 +191,15 @@ module t (/*AUTOARG*/);
       `CHECK_F(f_longint	,64,1'b1);
       `CHECK_F(f_integer	,32,1'b0);
       `CHECK_F(f_time		,64,1'b0);
+`ifdef VERILATOR  // else indeterminate
       `CHECK_F(f_chandle	,64,1'b0);
+`endif
       `CHECK_F(f_bit		,1 ,1'b1);
       `CHECK_F(f_logic		,1 ,1'b0);
       `CHECK_F(f_reg		,1 ,1'b0);
+      `CHECK_F(f_bit1		,1 ,1'b1);
+      `CHECK_F(f_logic1		,1 ,1'b0);
+      `CHECK_F(f_reg1		,1 ,1'b0);
       `CHECK_F(f_bit2		,2 ,1'b1);
       `CHECK_F(f_logic2		,2 ,1'b0);
       `CHECK_F(f_reg2		,2 ,1'b0);

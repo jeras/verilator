@@ -7,15 +7,14 @@ if (!$::Driver) { use FindBin; exec("$FindBin::Bin/bootstrap.pl", @ARGV, $0); di
 # Lesser General Public License Version 3 or the Perl Artistic License
 # Version 2.0.
 
-$Self->{vlt} or $Self->skip("Verilator only test");
-$ENV{VERILATOR_TEST_NO_GDB} and $Self->skip("Skipping due to VERILATOR_TEST_NO_GDB");
+$Self->{vlt} and $Self->skip("Verilator unsupported, bug408");
 
 compile (
-	 verilator_flags2 => ["--debug-sigsegv"],
-	 fails=>$Self->{v3},
+	 v_flags2 => ["--lint-only"],
+	 fails=>1,
 	 expect=>
-'%Error: Verilator internal fault, sorry.  Consider trying --debug --gdbbt
-%Error: Command Failed.*',
+'.*%Error: t/t_genvar_misuse_bad.v:\d+: Use of genvar where not convertible to constant: i
+%Error: Exiting due to.*',
 	 );
 
 ok(1);

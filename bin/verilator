@@ -69,7 +69,7 @@ if (! GetOptions (
 		  "debug:s"	=> \&debug,
 		  # "version!"	=> \&version,	# Also passthru'ed
 		  # Switches
-		  "gdb=s"	=> \$opt_gdb,	# Undocumented debugging
+		  "gdb!"	=> \$opt_gdb,
 		  "gdbbt!"	=> \$opt_gdbbt,
 		  # Additional parameters
 		  "<>"		=> sub {},	# Ignored
@@ -82,17 +82,24 @@ if ($opt_gdbbt && !gdb_works()) {
     warn "-Info: --gdbbt ignored: gdb doesn't seem to be working\n" if $Debug;
     $opt_gdbbt = 0;
 }
-if ($opt_gdbbt && !$opt_gdb && $Debug) {
+if ($opt_gdb) {
+    # Generic GDB interactive
+    run (("gdb"||$ENV{VERILATOR_GDB})
+	 ." ".verilator_bin()
+	 ." -ex 'run ".join(' ',@Opt_Verilator_Sw)."'"
+	 ." -ex 'set width 0'"
+	 ." -ex 'bt'");
+} elsif ($opt_gdbbt && $Debug) {
     # Run under GDB to get gdbbt
-    run ("gdb ".verilator_bin()
+    run ("gdb"
+	 ." ".verilator_bin()
 	 ." --batch --quiet --return-child-result"
 	 ." -ex 'run ".join(' ',@Opt_Verilator_Sw)."'"
 	 ." -ex 'set width 0'"
 	 ." -ex 'bt'");
 } else {
     # Normal, non gdb
-    run (($opt_gdb?"$opt_gdb ":"")
-	 .verilator_bin()
+    run (verilator_bin()
 	 ." ".join(' ',@Opt_Verilator_Sw));
 }
 
@@ -247,7 +254,7 @@ descriptions in the next sections for more information.
     --coverage-line             Enable line coverage
     --coverage-toggle           Enable toggle coverage
     --coverage-user             Enable PSL/SVL user coverage
-    --coverage-underscore       Enable covarge of _signals
+    --coverage-underscore       Enable coverage of _signals
      -D<var>[=<value>]          Set preprocessor define
     --debug                     Enable debugging
     --debug-check               Enable debugging assertions
@@ -260,6 +267,7 @@ descriptions in the next sections for more information.
     --exe                       Link to create executable
      -F <file>                  Parse options from a file, relatively
      -f <file>                  Parse options from a file
+    --gdb                       Run Verilator under GDB interactively
     --gdbbt                     Run Verilator under GDB for backtrace
     --help                      Display this help
      -I<dir>                    Directory to search for includes
@@ -558,11 +566,17 @@ The file may contain // comments which are ignored to the end of the line.
 Any $VAR, $(VAR), or ${VAR} will be replaced with the specified environment
 variable.
 
+=item --gdb
+
+Run Verilator underneath an interactive GDB (or VERILATOR_GDB environment
+variable value) session.  See also --gdbbt.
+
 =item --gdbbt
 
-If --debug is specified, run Verilator underneath a GDB process and print
-a backtrace on exit.  Without --debug or if GDB doesn't seem to work, this
-flag is ignored.
+If --debug is specified, run Verilator underneath a GDB process and print a
+backtrace on exit, then exit GDB immediately.  Without --debug or if GDB
+doesn't seem to work, this flag is ignored.  Intended for easy creation of
+backtraces by users; otherwise see the --gdb flag.
 
 =item --help
 
@@ -905,9 +919,9 @@ Disable the specified warning message.
 
 Disable all lint related warning messages, and all style warnings.  This is
 equivalent to "-Wno-CASEINCOMPLETE -Wno-CASEOVERLAP -Wno-CASEX
--Wno-CASEWITHX -Wno-CMPCONST -Wno-IMPLICIT -Wno-LITENDIAN -Wno-SYNCASYNCNET
--Wno-UNDRIVEN -Wno-UNSIGNED -Wno-UNUSED -Wno-WIDTH" plus the list shown for
-Wno-style.
+-Wno-CASEWITHX -Wno-CMPCONST -Wno-ENDLABEL -Wno-IMPLICIT -Wno-LITENDIAN
+-Wno-SYNCASYNCNET -Wno-UNDRIVEN -Wno-UNSIGNED -Wno-UNUSED -Wno-WIDTH" plus
+the list shown for Wno-style.
 
 It is strongly recommended you cleanup your code rather than using this
 option, it is only intended to be use when running test-cases of code
@@ -937,8 +951,8 @@ Enables the specified warning message.
 Enable all lint related warning messages (note by default they are already
 enabled), but do not affect style messages.  This is equivalent to
 "-Wwarn-CASEINCOMPLETE -Wwarn-CASEOVERLAP -Wwarn-CASEX -Wwarn-CASEWITHX
--Wwarn-CMPCONST -Wwarn-IMPLICIT -Wwarn-LITENDIAN -Wwarn-REALCVT
--Wwarn-UNSIGNED -Wwarn-WIDTH".
+-Wwarn-CMPCONST -Wwarn-ENDLABEL -Wwarn-IMPLICIT -Wwarn-LITENDIAN
+-Wwarn-REALCVT -Wwarn-UNSIGNED -Wwarn-WIDTH".
 
 =item -Wwarn-style
 
@@ -1270,7 +1284,7 @@ SYSTEMC/include.
 
 If set, specifies the directory containing the libsystemc.a library. If not
 specified, it will come from a default optionally specified at configure
-time (before Verilator was compiled), or compted from
+time (before Verilator was compiled), or computed from
 SYSTEMC/lib-SYSTEMC_ARCH.
 
 =item SYSTEMPERL
@@ -1298,6 +1312,11 @@ baseline regression tests.
 
 If set, specifies an alternative name of the Verilator binary.  May be used
 for debugging and selecting between multiple operating system builds.
+
+=item VERILATOR_GDB
+
+If set, the command to run when using the --gdb option, such as "ddd".  If
+not specified, it will use "gdb".
 
 =item VERILATOR_ROOT
 
@@ -1450,6 +1469,26 @@ DPI compatible but is easier to read and better supports multiple designs.
     #include "Vour__Dpi.h"
     Vour::publicSetBool(value);
     // or top->publicSetBool(value);
+
+Note that if the DPI task or function accesses any register or net within the
+RTL, it will require a scope to be set. This can be done using the standard
+functions within svdpi.h, after the module is instantiated, but before the
+task(s) and/or function(s) are called.
+
+For example, if the top level module is instantiated with the name "dut" and
+the name references within tasks are all hierarchical (dotted) names with
+respect to that top level module, then the scope could be set with
+
+    #include "svdpi.h"
+    ...
+    svSetScope (svGetScopeFromName ("dut"));
+
+(Remember that Verilator adds a "V" to the top of the module hierarchy.)
+
+Scope can also be set from within a DPI imported C function that has been
+called from Verilog by querying the scope of that function. See the
+sections on DPI Context Functions and DPI Header Isolation below and the
+comments within the svdpi.h header for more information.
 
 =head2 DPI Display Functions
 
@@ -2583,6 +2622,14 @@ Warns that the "defparam" statement was deprecated in Verilog 2001 and all
 designs should now be using the #(...) format to specify parameters.
 
 Disabled by default as this is a code style warning; it will simulate
+correctly.
+
+=item ENDLABEL
+
+Warns that a label attached to a "end"-something statement does not match
+the label attached to the block start.
+
+Ignoring this warning will only suppress the lint check, it will simulate
 correctly.
 
 =item GENCLK

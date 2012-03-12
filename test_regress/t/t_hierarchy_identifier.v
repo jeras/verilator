@@ -1,7 +1,7 @@
 // DESCRIPTION: Verilator: Verilog Test module
 //
 // This file ONLY is placed into the Public Domain, for any use,
-// without warranty, 2009 by Iztok Jeras.
+// without warranty, 2012 by Iztok Jeras.
 
 module t (/*AUTOARG*/
    // Inputs
@@ -21,8 +21,7 @@ module t (/*AUTOARG*/
    genvar i;
 
    // event counter
-   always @ (posedge clk)
-   begin
+   always @ (posedge clk) begin
       cnt <= cnt + 1;
    end
 

@@ -278,7 +278,19 @@ sub new {
     my $self = {@_};
 
     $self->{name} ||= $2 if $self->{pl_filename} =~ m!^(.*/)?([^/]*)\.pl$!;
-    $self->{obj_dir} ||= "obj_dir/$self->{name}";
+
+    $self->{mode} = "";
+    $self->{mode} ||= "atsim" if $self->{atsim};
+    $self->{mode} ||= "ghdl" if $self->{ghdl};
+    $self->{mode} ||= "vcs" if $self->{vcs};
+    $self->{mode} ||= "vlt" if $self->{vlt};
+    $self->{mode} ||= "nc" if $self->{nc};
+    $self->{mode} ||= "iv" if $self->{iv};
+
+    # For backward compatibility, the verilator tests have no prefix
+    $self->{obj_dir} ||= ("obj_dir/".($self->{mode} eq 'vlt' ? "" : $self->{mode}."_")
+			  ."$self->{name}");
+
     foreach my $dir (@::Test_Dirs) {
 	# t_dir used both absolutely and under obj_dir
 	if (-e "$dir/$self->{name}.pl") {
@@ -291,9 +303,9 @@ sub new {
 	}
     }
     $self->{t_dir} or die "%Error: Can't locate dir for $self->{name},";
+
     $self = {
 	name => undef, 		# Set below, name of this test
-	mode => "",
 	pl_filename => undef,	# Name of .pl file to get setup from
 	make_top_shell => 1,	# Make a default __top.v file
 	make_main => 1,		# Make __main.cpp
@@ -316,29 +328,29 @@ sub new {
 	atsim_flags => [split(/\s+/,"-c +sv +define+ATSIM"),
 			"+sv_dir+$self->{obj_dir}/.athdl_compile"],
 	atsim_flags2 => [],  # Overridden in some sim files
-	atsimrun_flags => [],
+	atsim_run_flags => [],
         # GHDL
 	ghdl => 0,
 	ghdl_work_dir => "$self->{obj_dir}/ghdl_compile",
 	ghdl_flags => [($::Debug?"-v":""),
 		       "--workdir=$self->{obj_dir}/ghdl_compile", ],
 	ghdl_flags2 => [],  # Overridden in some sim files
-	ghdlrun_flags => [],
+	ghdl_run_flags => [],
         # IV
 	iv => 0,
 	iv_flags => [split(/\s+/,"+define+iverilog -o $self->{obj_dir}/simiv")],
 	iv_flags2 => [],  # Overridden in some sim files
-	ivrun_flags => [],
+	iv_run_flags => [],
 	# VCS
 	vcs => 0,
 	vcs_flags => [split(/\s+/,"+vcs+lic+wait +cli -I +define+VCS+1 -q -sverilog -CFLAGS '-DVCS' ")],
 	vcs_flags2 => [],  # Overridden in some sim files
-	vcsrun_flags => [split(/\s+/,"+vcs+lic_wait")],
+	vcs_run_flags => [split(/\s+/,"+vcs+lic_wait")],
 	# NC
 	nc => 0,
 	nc_flags => [split(/\s+/,"+licqueue +nowarn+LIBNOU +define+NC=1 -q +assert +sv -c ")],
 	nc_flags2 => [],  # Overridden in some sim files
-	ncrun_flags => [split(/\s+/,"+licqueue -q +assert +sv -R")],
+	nc_run_flags => [split(/\s+/,"+licqueue -q +assert +sv -R")],
 	# Verilator
 	vlt => 0,
 	'v3' => 0,
@@ -352,12 +364,6 @@ sub new {
 	%$self};
     bless $self, $class;
 
-    $self->{mode} ||= "atsim" if $self->{atsim};
-    $self->{mode} ||= "ghdl" if $self->{ghdl};
-    $self->{mode} ||= "vcs" if $self->{vcs};
-    $self->{mode} ||= "vlt" if $self->{vlt};
-    $self->{mode} ||= "nc" if $self->{nc};
-    $self->{mode} ||= "iv" if $self->{iv};
     $self->{VM_PREFIX} ||= "V".$self->{name};
     $self->{stats} ||= "$self->{obj_dir}/V".$self->{name}."__stats.txt";
     $self->{status_filename} ||= "$self->{obj_dir}/V".$self->{name}.".status";
@@ -458,9 +464,8 @@ sub compile_vlt_flags {
     $self->{trace} = 1 if ($opt_trace || $checkflags =~ /-trace\b/);
     $self->{coverage} = 1 if ($checkflags =~ /-coverage\b/);
 
-    $opt_gdb="gdbrun" if defined $opt_gdb;
     my @verilator_flags = @{$param{verilator_flags}};
-    unshift @verilator_flags, "--gdb $opt_gdb" if $opt_gdb;
+    unshift @verilator_flags, "--gdb" if $opt_gdb;
     unshift @verilator_flags, "--gdbbt" if $opt_gdbbt;
     unshift @verilator_flags, @Opt_Driver_Verilator_Flags;
     unshift @verilator_flags, "--x-assign unique";  # More likely to be buggy
@@ -642,6 +647,7 @@ sub execute {
     my $self = (ref $_[0]? shift : $Self);
     return 1 if $self->errors || $self->skips;
     my %param = (%{$self}, @_);	   # Default arguments are from $self
+    #   params may be expect or {tool}_expect
     $self->oprint("Run\n");
 
     my $run_env = $param{run_env};
@@ -651,44 +657,56 @@ sub execute {
 	$self->_run(logfile=>"$self->{obj_dir}/atsim_sim.log",
 		    fails=>$param{fails},
 		    cmd=>["echo q | ".$run_env."$self->{obj_dir}/athdl_sv",
-			  @{$param{atsimrun_flags}},
+			  @{$param{atsim_run_flags}},
 			  @{$param{all_run_flags}},
-			  ]);
+		          ],
+		    %param,
+		    expect=>$param{atsim_run_expect},	# non-verilator expect isn't the same
+		    );
     }
     elsif ($param{ghdl}) {
 	$self->_run(logfile=>"$self->{obj_dir}/ghdl_sim.log",
 		    fails=>$param{fails},
 		    cmd=>[$run_env."$self->{obj_dir}/simghdl",
-			  @{$param{ghdlrun_flags}},
+			  @{$param{ghdl_run_flags}},
 			  @{$param{all_run_flags}},
-			  ]);
+		          ],
+		    %param,
+		    expect=>$param{ghdl_run_expect},	# non-verilator expect isn't the same
+		    );
     }
     elsif ($param{iv}) {
 	$self->_run(logfile=>"$self->{obj_dir}/iv_sim.log",
 		    fails=>$param{fails},
 		    cmd=>[$run_env."$self->{obj_dir}/simiv",
-			  @{$param{ivrun_flags}},
+			  @{$param{iv_run_flags}},
 			  @{$param{all_run_flags}},
-			  ]);
+		          ],
+		    %param,
+		    expect=>$param{iv_run_expect},	# non-verilator expect isn't the same
+		    );
     }
     elsif ($param{nc}) {
 	$self->_run(logfile=>"$self->{obj_dir}/nc_sim.log",
 		    fails=>$param{fails},
 		    cmd=>["echo q | ".$run_env.($ENV{VERILATOR_NCVERILOG}||"ncverilog"),
-			  @{$param{ncrun_flags}},
+			  @{$param{nc_run_flags}},
 			  @{$param{all_run_flags}},
-			  ]);
+		          ],
+		    %param,
+		    expect=>$param{nc_run_expect},	# non-verilator expect isn't the same
+		    );
     }
     elsif ($param{vcs}) {
 	#my $fh = IO::File->new(">simv.key") or die "%Error: $! simv.key,";
 	#$fh->print("quit\n"); $fh->close;
 	$self->_run(logfile=>"$self->{obj_dir}/vcs_sim.log",
 		    cmd=>["echo q | ".$run_env."./simv",
-			  @{$param{vcsrun_flags}},
+			  @{$param{vcs_run_flags}},
 			  @{$param{all_run_flags}},
 		          ],
 		    %param,
-		    expect=>undef,	# vcs expect isn't the same
+		    expect=>$param{vcs_run_expect},	# non-verilator expect isn't the same
 		    );
     }
     elsif ($param{vlt}
@@ -697,11 +715,14 @@ sub execute {
 	$param{executable} ||= "$self->{obj_dir}/$param{VM_PREFIX}";
 	$self->_run(logfile=>"$self->{obj_dir}/vlt_sim.log",
 		    cmd=>[($run_env
-			   .($opt_gdbsim ? "gdbrun ":"")
-			   .$param{executable}),
+			   .($opt_gdbsim ? ("gdb"||$ENV{VERILATOR_GDB})." " : "")
+			   .$param{executable}
+			   .($opt_gdbsim ? " -ex 'run " : "")),
 			  @{$param{all_run_flags}},
-			  ],
+			  ($opt_gdbsim ? "'" : ""),
+		    ],
 		    %param,
+		    expect=>$param{expect},		# backward compatible name
 		    );
     }
     else {

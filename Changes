@@ -4,15 +4,20 @@ The contributors that suggested a given feature are shown in [].  [by ...]
 indicates the contributor was also the author of the fix; Thanks!
 
 
-* Verilator 3.832 devel
+* Verilator 3.833 devel
 
-[run cppcheck]
+****  Fix and document --gdb option, bug454. [Jeremy Bennett]
+
+
+* Verilator 3.832 2012/03/07
 
 ***   Fix memory delayed assignments from multiple clock domains. [Andrew Ling]
 
+***   Support arrayed SystemC I/O pins.  [Christophe Joly]
+
 ***   Report MULTIDRIVEN on memories set in multiple clock domains.
 
-***   Support arrayed SystemC I/O pins.  [Christophe Joly]
+***   Report ENDLABEL on mismatching end labels, bug450. [Iztok Jeras]
 
 ****  Fix expansion of back-slashed escaped macros, bug441. [Alberto Del Rio]
 
