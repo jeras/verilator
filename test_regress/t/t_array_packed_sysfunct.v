@@ -27,8 +27,7 @@ module t (/*AUTOARG*/
    integer wdt = 0;  // width
 
    // event counter
-   always @ (posedge clk)
-   begin
+   always @ (posedge clk) begin
       cnt <= cnt + 1;
    end
 
@@ -51,9 +50,7 @@ module t (/*AUTOARG*/
       endcase
       // dimmension counter
       case (cnt[1:0])
-         2'd0   : begin  dim <= 1;  wdt = (slc==1) ? WA/2
-                                        : (slc==2) ? 1
-                                        : WA;  end
+         2'd0   : begin  dim <= 1;  wdt = (slc==1) ? WA/2 : (slc==2) ? 1 : WA;  end
          2'd1   : begin  dim <= 2;  wdt = WB;  end
          2'd2   : begin  dim <= 3;  wdt = WC;  end
          default: begin  dim <= 0;  wdt = 0;   end
