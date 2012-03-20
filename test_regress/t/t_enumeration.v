@@ -52,49 +52,41 @@ module t (/*AUTOARG*/
       else if (cnt== 1)  begin
          if (rainbow7        !== 3'd1   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== red    ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "red"   ) begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.next();
       end
       else if (cnt== 2)  begin
          if (rainbow7        !== 3'd2   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== orange ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "orange") begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.next();
       end
       else if (cnt== 3)  begin
          if (rainbow7        !== 3'd3   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== yellow ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "yellow") begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.next();
       end
       else if (cnt== 4)  begin
          if (rainbow7        !== 3'd4   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== green  ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "green" ) begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.next();
       end
       else if (cnt== 5)  begin
          if (rainbow7        !== 3'd5   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== blue   ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "blue"  ) begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.next();
       end
       else if (cnt== 6)  begin
          if (rainbow7        !== 3'd6   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== indigo ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "indigo") begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.next();
       end
       else if (cnt== 7)  begin
          if (rainbow7        !== 3'd7   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== violet ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "violet") begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.next();
       end
       else if (cnt== 8)  begin
          if (rainbow7        !== 3'd1   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== red    ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "red"   ) begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.next();
       end
    end else if (mod==1) begin
@@ -107,49 +99,41 @@ module t (/*AUTOARG*/
       else if (cnt== 1)  begin
          if (rainbow7        !== 3'd7   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== violet ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "violet") begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.prev();
       end
       else if (cnt== 2)  begin
          if (rainbow7        !== 3'd6   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== indigo ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "indigo") begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.prev();
       end
       else if (cnt== 3)  begin
          if (rainbow7        !== 3'd5   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== blue   ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "blue"  ) begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.prev();
       end
       else if (cnt== 4)  begin
          if (rainbow7        !== 3'd4   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== green  ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "green" ) begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.prev();
       end
       else if (cnt== 5)  begin
          if (rainbow7        !== 3'd3   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== yellow ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "yellow") begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.prev();
       end
       else if (cnt== 6)  begin
          if (rainbow7        !== 3'd2   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== orange ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "orange") begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.prev();
       end
       else if (cnt== 7)  begin
          if (rainbow7        !== 3'd1   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== red    ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "red"   ) begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.prev();
       end
       else if (cnt== 8)  begin
          if (rainbow7        !== 3'd7   ) begin $display("%b", rainbow7       ); $stop(); end
          if (rainbow7        !== violet ) begin $display("%b", rainbow7       ); $stop(); end
-         if (rainbow7.name() != "violet") begin $display("%s", rainbow7.name()); $stop(); end
          rainbow7 <= rainbow7.prev();
       end
    end
@@ -167,19 +151,16 @@ module t (/*AUTOARG*/
       else if (cnt== 1)  begin
          if (switch        !== 1'b0) begin $display("%b", switch       ); $stop(); end
          if (switch        !== OFF ) begin $display("%b", switch       ); $stop(); end
-         if (switch.name() != "OFF") begin $display("%s", switch.name()); $stop(); end
          switch <= switch.next();
       end
       else if (cnt== 2)  begin
          if (switch        !== 1'b1) begin $display("%b", switch       ); $stop(); end
          if (switch        !== ON  ) begin $display("%b", switch       ); $stop(); end
-         if (switch.name() != "ON" ) begin $display("%s", switch.name()); $stop(); end
          switch <= switch.next();
       end
       else if (cnt== 3)  begin
          if (switch        !== 1'b0) begin $display("%b", switch       ); $stop(); end
          if (switch        !== OFF ) begin $display("%b", switch       ); $stop(); end
-         if (switch.name() != "OFF") begin $display("%s", switch.name()); $stop(); end
          switch <= switch.next();
       end
    end else if (mod==1) begin
@@ -192,19 +173,16 @@ module t (/*AUTOARG*/
       else if (cnt== 1)  begin
          if (switch        !== 1'b1) begin $display("%b", switch       ); $stop(); end
          if (switch        !== ON  ) begin $display("%b", switch       ); $stop(); end
-         if (switch.name() != "ON" ) begin $display("%s", switch.name()); $stop(); end
          switch <= switch.prev();
       end
       else if (cnt== 2)  begin
          if (switch        !== 1'b0) begin $display("%b", switch       ); $stop(); end
          if (switch        !== OFF ) begin $display("%b", switch       ); $stop(); end
-         if (switch.name() != "OFF") begin $display("%s", switch.name()); $stop(); end
          switch <= switch.prev();
       end
       else if (cnt== 3)  begin
          if (switch        !== 1'b1) begin $display("%b", switch       ); $stop(); end
          if (switch        !== ON  ) begin $display("%b", switch       ); $stop(); end
-         if (switch.name() != "ON" ) begin $display("%s", switch.name()); $stop(); end
          switch <= switch.prev();
       end
    end
@@ -222,91 +200,76 @@ module t (/*AUTOARG*/
       else if (cnt== 1)  begin
          if (family        !== 0        ) begin $display("%b", family       ); $stop(); end
          if (family        !== father   ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "father"  ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 2)  begin
          if (family        !== 1        ) begin $display("%b", family       ); $stop(); end
          if (family        !== mother   ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "mother"  ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 3)  begin
          if (family        !== 2        ) begin $display("%b", family       ); $stop(); end
          if (family        !== son0     ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "son0"    ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 4)  begin
          if (family        !== 3        ) begin $display("%b", family       ); $stop(); end
          if (family        !== son1     ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "son1"    ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 5)  begin
          if (family        !== 4        ) begin $display("%b", family       ); $stop(); end
          if (family        !== daughter ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "daughter") begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 6)  begin
          if (family        !== 5        ) begin $display("%b", family       ); $stop(); end
          if (family        !== gerbil   ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "gerbil"  ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 7)  begin
          if (family        !== 10       ) begin $display("%b", family       ); $stop(); end
          if (family        !== dog0     ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "dog0"    ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 8)  begin
          if (family        !== 11       ) begin $display("%b", family       ); $stop(); end
          if (family        !== dog1     ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "dog1"    ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 9)  begin
          if (family        !== 12       ) begin $display("%b", family       ); $stop(); end
          if (family        !== dog2     ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "dog2"    ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 10)  begin
          if (family        !== 20       ) begin $display("%b", family       ); $stop(); end
          if (family        !== cat3     ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "cat3"    ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 11)  begin
          if (family        !== 21       ) begin $display("%b", family       ); $stop(); end
          if (family        !== cat4     ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "cat4"    ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 12)  begin
          if (family        !== 22       ) begin $display("%b", family       ); $stop(); end
          if (family        !== cat5     ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "cat5"    ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 13)  begin
          if (family        !== 30       ) begin $display("%b", family       ); $stop(); end
          if (family        !== car3     ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "car3"    ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 14)  begin
          if (family        !== 31       ) begin $display("%b", family       ); $stop(); end
          if (family        !== car2     ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "car2"    ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
       else if (cnt== 15)  begin
          if (family        !== 32       ) begin $display("%b", family       ); $stop(); end
          if (family        !== car1     ) begin $display("%b", family       ); $stop(); end
-         if (family.name() != "car1"    ) begin $display("%s", family.name()); $stop(); end
          family <= family.next();
       end
    end
