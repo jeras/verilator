@@ -25,8 +25,7 @@ module t (/*AUTOARG*/
    integer cnt = 0;
 
    // event counter
-   always @ (posedge clk)
-   begin
+   always @ (posedge clk) begin
       cnt <= cnt + 1;
    end
 
