@@ -284,12 +284,12 @@ public:
     operator en () const { return m_e; }
     int width() const {
 	switch (m_e) {
-	case BIT:	return 1;
+	case BIT:	return 1;   // scalar, can't bit extract unless ranged
 	case BYTE:	return 8;
 	case CHANDLE:	return 64;
 	case INT:	return 32;
 	case INTEGER:	return 32;
-	case LOGIC:	return 1;
+	case LOGIC:	return 1;   // scalar, can't bit extract unless ranged
 	case LONGINT:	return 64;
 	case DOUBLE:	return 64;  // opaque
 	case FLOAT:	return 32;  // opaque
@@ -1173,8 +1173,8 @@ struct AstNodeStmt : public AstNode {
 	: AstNode(fl) {}
     ASTNODE_BASE_FUNCS(NodeStmt)
     // METHODS
-    virtual void addNextStmt(AstNode* newp, AstNode* belowp);  // Stop statement searchback here 
-    virtual void addBeforeStmt(AstNode* newp, AstNode* belowp);  // Stop statement searchback here 
+    virtual void addNextStmt(AstNode* newp, AstNode* belowp);  // Stop statement searchback here
+    virtual void addBeforeStmt(AstNode* newp, AstNode* belowp);  // Stop statement searchback here
 };
 
 struct AstNodeAssign : public AstNodeStmt {

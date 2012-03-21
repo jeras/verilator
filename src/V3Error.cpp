@@ -67,16 +67,37 @@ V3ErrorCode::V3ErrorCode(const char* msgp) {
 //######################################################################
 // FileLineSingleton class functions
 
+const string FileLineSingleton::filenameLetters(int no) {
+    const int size = 1 + (64 / 4);  // Each letter retires more than 4 bits of a > 64 bit number
+    char out[size];
+    char* op = out+size-1;
+    *--op = '\0';  // We build backwards
+    int num = no;
+    do {
+	*--op = 'a'+num%26;
+	num /= 26;
+    } while (num);
+    return op;
+}
+
 int FileLineSingleton::nameToNumber(const string& filename) {
     // Convert filenames to a filenameno
     // This lets us assign a nice small identifier for debug messages, but more
     // importantly lets us use a 4 byte int instead of 8 byte pointer in every FileLine.
-    map<string,int>::const_iterator iter = m_namemap.find(filename);
+    FileNameNumMap::const_iterator iter = m_namemap.find(filename);
     if (VL_LIKELY(iter != m_namemap.end())) return iter->second;
     int num = m_names.size();
     m_names.push_back(filename);
     m_namemap.insert(make_pair(filename,num));
     return num;
+}
+
+void FileLineSingleton::fileNameNumMapDumpXml(ostream& os) {
+    os<<"<files>\n";
+    for (FileNameNumMap::const_iterator it = m_namemap.begin(); it != m_namemap.end(); ++it) {
+	os<<"<file id=\""<<filenameLetters(it->second)<<"\" filename=\""<<it->first<<"\"/>\n";
+    }
+    os<<"</files>\n";
 }
 
 //######################################################################
@@ -92,19 +113,6 @@ FileLine::FileLine(FileLine::EmptySecret) {
 	V3ErrorCode code = (V3ErrorCode)codei;
 	warnOff(code, code.defaultsOff());
     }
-}
-
-const string FileLine::filenameLetters() const {
-    const int size = 1 + (64 / 4);  // Each letter retires more than 4 bits of a > 64 bit number
-    char out[size];
-    char* op = out+size-1;
-    *--op = '\0';  // We build backwards
-    int num = m_filenameno;
-    do {
-	*--op = 'a'+num%26;
-	num /= 26;
-    } while (num);
-    return op;
 }
 
 string FileLine::lineDirectiveStrg(int enterExit) const {

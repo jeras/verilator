@@ -6,6 +6,8 @@ indicates the contributor was also the author of the fix; Thanks!
 
 * Verilator 3.833 devel
 
+****  Fix signed array warning, bug456. [Alex Solomatnikov]
+
 ****  Fix and document --gdb option, bug454. [Jeremy Bennett]
 
 
@@ -61,7 +63,7 @@ indicates the contributor was also the author of the fix; Thanks!
 
 **** Support $system.  [Ruben Diez]
 
-**** Support $sscanf with %g. [Holger Wächtler]
+**** Support $sscanf with %g. [Holger Waechtler]
 
 **** Indicate 'exiting due to errors' if errors, not warnings. [Ruben Diez]
 
@@ -69,7 +71,7 @@ indicates the contributor was also the author of the fix; Thanks!
 
 **** Fix reporting not found modules if generate-off, bug403. [Jeremy Bennett]
 
-**** Fix $display with %d following %g. [Holger Wächtler]
+**** Fix $display with %d following %g. [Holger Waechtler]
 
 
 * Verilator 3.824 2011/10/25

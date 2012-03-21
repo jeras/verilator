@@ -262,6 +262,7 @@ descriptions in the next sections for more information.
     --debugi-<srcfile> <level>  Enable debugging a source file at a level
      +define+<var>+<value>      Set preprocessor define
     --dump-tree                 Enable dumping .tree files
+    --dump-treei <level>        Enable dumping .tree files at a level
      -E                         Preprocess, but do not compile
     --error-limit <value>       Abort after this number of errors
     --exe                       Link to create executable
@@ -529,9 +530,16 @@ standard across Verilog tools while -D is an alias for GCC compatibility.
 
 =item --dump-tree
 
-Rarely needed.  Enable writing .tree debug files.  This is enabled with
---debug, so "--debug --no-dump-tree" may be useful if the dump files are
-large and not desired.
+Rarely needed.  Enable writing .tree debug files with dumping level 3,
+which dumps the standard critical stages.  --dump-tree is enabled
+automatically with --debug, so "--debug --no-dump-tree" may be useful if
+the dump files are large and not desired.
+
+=item --dump-treei
+
+Rarely needed.  Enable writing .tree debug files with a specific dumping
+level, 0 disbles dumps and is equivelent to "--no-dump-tree".  Level 9
+enables dumping of every stage.
 
 =item -E
 
@@ -1934,9 +1942,17 @@ The Verilog code returns to the last language mode specified with
 
 Used after a signal declaration to indicate the signal is used to gate a
 clock, and the user takes responsibility for insuring there are no races
-related to it.  (Typically by adding a latch, and running static timing
-analysis.) This will cause the clock gate to be ignored in the scheduling
-algorithm, improving performance.  It's also a good idea to enable the
+related to it. (Typically by adding a latch, and running static timing
+analysis.) For example:
+
+   reg enable_r /*verilator clock_enable*/;
+   wire gated_clk = clk & enable_r;
+   always_ff @ (posedge clk)
+      enable_r <= enable_early;
+
+The clock_enable attribute will cause the clock gate to be ignored in the
+scheduling algorithm, sometimes required for correct clock behavior, and
+always improving performance.  It's also a good idea to enable the
 IMPERFECTSCH warning, to insure all clock enables are properly recognized.
 
 =item /*verilator coverage_block_off*/
@@ -2253,10 +2269,12 @@ different.)
 
 =head2 Generated Clocks
 
-Verilator attempts to deal with generated clocks correctly, however new
-cases may turn up bugs in the scheduling algorithm.  The safest option is
-to have all clocks as primary inputs to the model, or wires directly
-attached to primary inputs.
+Verilator attempts to deal with generated and enabled clocks correctly,
+however some cases cause problems in the scheduling algorithm which is
+optimized for performance.  The safest option is to have all clocks as
+primary inputs to the model, or wires directly attached to primary inputs.
+For proper behavior clock enables may also need the /*verilator
+clock_enable*/ attribute.
 
 =head2 Ranges must be big-bit-endian
 
@@ -3409,43 +3427,44 @@ faster than many popular commercial simulators.
 Many people have provided ideas and other assistance with Verilator.
 
 The major corporate sponsors of Verilator, by providing significant
-contributions of time or funds include include Compaq Corporation, Digital
-Equipment Corporation, Intel Corporation, Mindspeed Technologies Inc.,
-MicroTune Inc., picoChip Designs Ltd., Sun Microsystems, Nauticus Networks,
-and SiCortex Inc.
+contributions of time or funds include include Cavium Networks, Compaq
+Corporation, Digital Equipment Corporation, Embecosm Ltd., Intel
+Corporation, Mindspeed Technologies Inc., MicroTune Inc., picoChip Designs
+Ltd., Sun Microsystems, Nauticus Networks, and SiCortex Inc.
 
-The people who have contributed major functionality are Byron Bradley, Lane
-Brooks, Duane Galbi, Paul Wasson, and Wilson Snyder.  Major testers include
-Jeff Dutton, Ralf Karge, David Hewson, Wim Michiels, and Gene Weber.
+The people who have contributed major functionality are Byron Bradley,
+Jeremy Bennett, Lane Brooks, Duane Galbi, Paul Wasson, and Wilson Snyder.
+Major testers include Jeff Dutton, Ralf Karge, David Hewson, Wim Michiels,
+Alex Solomatnikov, Sebastien Van Cauwenberghe and Gene Weber.
 
 Some of the people who have provided ideas and feedback for Verilator
-include: David Addison, Hans Van Antwerpen, Vasu Arasanipalai, Jens Arm, J
-Baxter, Jeremy Bennett, David Black, Gregg Bouchard, Christopher Boumenot,
-Nick Bowler, Byron Bradley, Bryan Brady, Lane Brooks, John Brownlee,
-Lawrence Butcher, Chris Candler, Lauren Carlson, Donal Casey, Terry Chen,
-Robert A. Clark, Allan Cochrane, Gunter Dannoritzer, Ashutosh Das, Bernard
-Deadman, John Deroo, John Dickol, Danny Ding, Ivan Djordjevic, Alex Duller,
-Jeff Dutton, Chandan Egbert, Joe Eiler, Ahmed El-Mahmoudy, Robert Farrell,
-Eugen Fekete, Andrea Foletto, Bob Fredieu, Shankar Giri, Sam Gladstone,
-Amir Gonnen, Chitlesh Goorah, Neil Hamilton, Thomas Hawkins, David Hewson,
-Jae Hossell, Ben Jackson, Iztok Jeras, Mike Kagen, Guy-Armand Kamendje,
-Vasu Kandadi, Patricio Kaplan, Ralf Karge, Dan Katz, Sol Katzman, Jonathan
-Kimmitt, Gernot Koch, Soon Koh, Steve Kolecki, Steve Lang, Stephane
-Laurent, Christian Leber, Charlie Lind, Paul Liu, Dan Lussier, Fred Ma,
+include: David Addison, Vasu Arasanipalai, Jens Arm, J Baxter, Jeremy
+Bennett, David Black, Gregg Bouchard, Christopher Boumenot, Nick Bowler,
+Byron Bradley, Bryan Brady, Lane Brooks, John Brownlee, Lawrence Butcher,
+Chris Candler, Lauren Carlson, Donal Casey, Terry Chen, Robert A. Clark,
+Allan Cochrane, Gunter Dannoritzer, Ashutosh Das, Bernard Deadman, Mike
+Denio, John Deroo, John Dickol, Ruben Diez, Danny Ding, Ivan Djordjevic,
+Alex Duller, Jeff Dutton, Chandan Egbert, Joe Eiler, Ahmed El-Mahmoudy,
+Robert Farrell, Eugen Fekete, Andrea Foletto, Bob Fredieu, Shankar Giri,
+Sam Gladstone, Amir Gonnen, Chitlesh Goorah, Neil Hamilton, Thomas Hawkins,
+David Hewson, Jae Hossell, Ben Jackson, Iztok Jeras, Christophe Joly, Mike
+Kagen, Guy-Armand Kamendje, Vasu Kandadi, Patricio Kaplan, Ralf Karge, Dan
+Katz, Sol Katzman, Jonathan Kimmitt, Gernot Koch, Soon Koh, Steve Kolecki,
+David Kravitz, Steve Lang, Stephane Laurent, Walter Lavino, Christian
+Leber, John Li, Charlie Lind, Andrew Ling, Paul Liu, Dan Lussier, Fred Ma,
 Duraid Madina, Mark Marshall, Jason McMullan, Wim Michiels, Dennis
 Muhlestein, John Murphy, Richard Myers, Dimitris Nalbantis, Paul Nitza,
 Pete Nixon, Lisa Noack, Mark Nodine, Andreas Olofsson, Brad Parker, Dominic
-Plunkett, Niranjan Prabhu, Usha Priyadharshini, Oleg Rodionov, John
-Sanguinetti, Salman Sheikh, Mike Shinkarovsky, Rafael Shirakawa, Jeffrey
-Short, Rodney Sinclair, Brian Small, Alex Solomatnikov, Art Stamness, John
-Stroebel, Emerson Suguimoto, Gene Sullivan, Renga Sundararajan, Stefan
-Thiede, Gary Thomas, Steve Tong, Holger Waechtler, Stefan Wallentowitz,
-Shawn Wang, Greg Waters, Eugene Weber, David Welch, Leon Wildman, Gerald
-Williams, Trevor Williams, Jeff Winston, Joshua Wise, Johan Wouters, and
-Ding Xiaoliang.
+Plunkett, Niranjan Prabhu, Usha Priyadharshini, Alberto Del Rio, Oleg
+Rodionov, John Sanguinetti, Salman Sheikh, Mike Shinkarovsky, Rafael
+Shirakawa, Jeffrey Short, Rodney Sinclair, Brian Small, Alex Solomatnikov,
+Art Stamness, John Stroebel, Emerson Suguimoto, Gene Sullivan, Renga
+Sundararajan, Stefan Thiede, Gary Thomas, Steve Tong, Hans Van Antwerpen,
+Holger Waechtler, Stefan Wallentowitz, Shawn Wang, Greg Waters, Thomas
+Watts, Eugene Weber, David Welch, Leon Wildman, Gerald Williams, Trevor
+Williams, Jeff Winston, Joshua Wise, Johan Wouters, and Ding Xiaoliang.
 
-Thanks all.
-
+Thanks to them, and all those we've missed including above.
 
 =head1 DISTRIBUTION
 

@@ -61,7 +61,7 @@ class EmitVBaseVisitor : public EmitCBaseVisitor {
 	putsNoTracking(AstNode::quoteName(str));
 	putsNoTracking("\"");
     }
-    
+
     // VISITORS
     virtual void visit(AstNetlist* nodep, AstNUser*) {
 	nodep->iterateChildren(*this);
@@ -447,11 +447,11 @@ class EmitVBaseVisitor : public EmitCBaseVisitor {
 	puts("[");
 	if (nodep->msbp()->castConst() && nodep->lsbp()->castConst()) {
 	    // Looks nicer if we print [1:0] rather than [32'sh1:32sh0]
-	    puts(cvtToStr(nodep->msbEndianedp()->castConst()->toSInt())); puts(":");
-	    puts(cvtToStr(nodep->lsbEndianedp()->castConst()->toSInt())); puts("]");
+	    puts(cvtToStr(nodep->leftp()->castConst()->toSInt())); puts(":");
+	    puts(cvtToStr(nodep->rightp()->castConst()->toSInt())); puts("]");
 	} else {
-	    nodep->msbEndianedp()->iterateAndNext(*this); puts(":");
-	    nodep->lsbEndianedp()->iterateAndNext(*this); puts("]");
+	    nodep->leftp()->iterateAndNext(*this); puts(":");
+	    nodep->rightp()->iterateAndNext(*this); puts("]");
 	}
     }
     virtual void visit(AstSel* nodep, AstNUser*) {
@@ -596,7 +596,7 @@ class EmitVStreamVisitor : public EmitVBaseVisitor {
     virtual void putbs(const string& str) { puts(str); }
     virtual void putfs(AstNode*, const string& str) { putbs(str); }
     virtual void putqs(AstNode*, const string& str) { putbs(str); }
- public:
+public:
     EmitVStreamVisitor(AstNode* nodep, ostream& os)
 	: m_os(os) {
 	nodep->accept(*this);
@@ -635,7 +635,8 @@ public:
     FileLine* prefixFl() const { return m_prefixFl; }
     int column() const { return m_column; }
     EmitVPrefixedFormatter(ostream& os, const string& prefix, int flWidth)
-	: V3OutFormatter("__STREAM", true), m_os(os), m_prefix(prefix), m_flWidth(flWidth) {
+	: V3OutFormatter("__STREAM", V3OutFormatter::LA_VERILOG)
+	, m_os(os), m_prefix(prefix), m_flWidth(flWidth) {
 	m_column = 0;
 	m_prefixFl = v3Global.rootp()->fileline();  // NETLIST's fileline instead of NULL to avoid NULL checks
     }

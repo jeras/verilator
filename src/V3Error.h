@@ -257,7 +257,10 @@ inline uint32_t cvtToHash(void* vp) {
 class FileLine;
 
 class FileLineSingleton {
-    map<string,int>	m_namemap;	// filenameno for each filename
+    // TYPES
+    typedef map<string,int> FileNameNumMap;
+    // MEMBERS
+    FileNameNumMap	m_namemap;	// filenameno for each filename
     deque<string>	m_names;	// filename text for each filenameno
     // COSNTRUCTORS
     FileLineSingleton() { }
@@ -268,6 +271,8 @@ protected:
     int nameToNumber(const string& filename);
     const string numberToName(int filenameno) const { return m_names[filenameno]; }
     void clear() { m_namemap.clear(); m_names.clear(); }
+    void fileNameNumMapDumpXml(ostream& os);
+    static const string filenameLetters(int fileno);
 };
 
 class FileLine {
@@ -319,10 +324,11 @@ public:
     int lineno () const { return m_lineno; }
     string ascii() const;
     const string filename () const { return singleton().numberToName(m_filenameno); }
-    const string filenameLetters() const; 
+    const string filenameLetters() const { return singleton().filenameLetters(m_filenameno); }
     const string filebasename () const;
     const string filebasenameNoExt () const;
     const string profileFuncname() const;
+    const string xml() const { return "fl=\""+filenameLetters()+cvtToStr(lineno())+"\""; }
     string lineDirectiveStrg(int enter_exit_level) const;
     void warnOn(V3ErrorCode code, bool flag) { m_warnOn.set(code,flag); }	// Turn on/off warning messages on this line.
     void warnOff(V3ErrorCode code, bool flag) { warnOn(code,!flag); }
@@ -348,13 +354,15 @@ public:
 	defaultFileLine().warnOff(code, flag); }
     static bool globalWarnOff(const string& code, bool flag) {
 	return defaultFileLine().warnOff(code, flag); }
+    static void fileNameNumMapDumpXml(ostream& os) {
+	singleton().fileNameNumMapDumpXml(os); }
 
     // METHODS - Called from netlist
     // Merge warning disables from another fileline
     void modifyStateInherit(const FileLine* fromp);
     // Change the current fileline due to actions discovered after parsing
     // and may have side effects on other nodes sharing this FileLine.
-    // Use only when this is intended 
+    // Use only when this is intended
     void modifyWarnOff(V3ErrorCode code, bool flag) { warnOff(code,flag); }
 
     // OPERATORS
