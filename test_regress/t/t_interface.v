@@ -10,6 +10,16 @@ module t (/*AUTOARG*/
 
    input clk;
 
+   logic   rst = 1'b1;  // reset
+   integer rst_cnt = 0;
+
+   // reset is removed after a delay
+   always @ (posedge clk)
+   begin
+      rst_cnt <= rst_cnt + 1;
+      rst     <= rst_cnt <= 3;
+   end
+
    // counters
    int cnt;
    int cnt_src;
@@ -26,12 +36,15 @@ module t (/*AUTOARG*/
    end
 
    // interface instance
-   handshake inf;
+   handshake inf (
+      .clk (clk),
+      .rst (rst)
+   );
 
    // source instance
    source #(
       .RW  (8),
-      .RP  (8'b)  // 
+      .RP  (8'b11100001)
    ) source (
       .clk  (clk),
       .rst  (rst),
@@ -42,7 +55,7 @@ module t (/*AUTOARG*/
    // drain instance
    drain #(
       .RW  (8),
-      .RP  (8'b)  // 
+      .RP  (8'b11010100)
    ) drain (
       .clk  (clk),
       .rst  (rst),
@@ -95,18 +108,18 @@ endinterface : handshake
 // source module
 module source #(
    // random generator parameters
-   parameter int unsigned RW,    // LFSR width
-   parameter bit [RW-1:0] RP,    // LFSR polinom
-   parameter bit [RW-1:0] RR='1  // LFSR reset state
+   parameter int unsigned RW=1,   // LFSR width
+   parameter bit [RW-1:0] RP='0,  // LFSR polinom
+   parameter bit [RW-1:0] RR='1   // LFSR reset state
 )(
    input logic    clk,
    input logic    rst,
-   handshake.src  inf
-   output integer cnt;
+   handshake.src  inf,
+   output integer cnt
 );
 
    // LFSR
-   [RW-1:0] rnd;
+   logic [RW-1:0] rnd;
 
    // LFSR in Galois form
    always @ (posedge clk, posedge rst)
@@ -127,18 +140,18 @@ endmodule : source
 // drain module
 module drain #(
    // random generator parameters
-   parameter int unsigned RW,    // LFSR width
-   parameter bit [RW-1:0] RP,    // LFSR polinom
-   parameter bit [RW-1:0] RR='1  // LFSR reset state
+   parameter int unsigned RW=1,   // LFSR width
+   parameter bit [RW-1:0] RP='0,  // LFSR polinom
+   parameter bit [RW-1:0] RR='1   // LFSR reset state
 )(
    input logic    clk,
    input logic    rst,
-   handshake.drn  inf
-   output integer cnt;
+   handshake.drn  inf,
+   output integer cnt
 );
 
    // LFSR
-   [RW-1:0] rnd;
+   logic [RW-1:0] rnd;
 
    // LFSR in Galois form
    always @ (posedge clk, posedge rst)
