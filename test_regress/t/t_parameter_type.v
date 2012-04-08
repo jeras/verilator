@@ -11,7 +11,7 @@ module t (/*AUTOARG*/
    input clk;
 
    // counters
-   int cnt = 0;
+   int cnt;
    int cnt_bit ;
    int cnt_byte;
    int cnt_int ;
@@ -31,22 +31,22 @@ module t (/*AUTOARG*/
    // finish report
    always @ (posedge clk)
    if (cnt == 5) begin
-     if (siz_bit  !=  1)  $stop();
-     if (siz_byte !=  8)  $stop();
-     if (siz_int  != 32)  $stop();
-     if (siz_ar1d != 24)  $stop();
-     if (siz_ar2d != 16)  $stop();
+      if (siz_bit  !=  1)  $stop();
+      if (siz_byte !=  8)  $stop();
+      if (siz_int  != 32)  $stop();
+      if (siz_ar1d != 24)  $stop();
+      if (siz_ar2d != 16)  $stop();
    end else if (cnt > 5) begin
       $write("*-* All Finished *-*\n");
       $finish;
    end
 
    // instances with various types
-   mod_typ #(.TYP (bit           )) mod_byte (clk, cnt_bit , siz_bit );
-   mod_typ #(.TYP (byte          )) mod_byte (clk, cnt_byte, siz_byte);
-   mod_typ #(.TYP (int           )) mod_byte (clk, cnt_int , siz_int );
-   mod_typ #(.TYP (bit [23:0]    )) mod_byte (clk, cnt_ar1d, siz_ar1d);
-   mod_typ #(.TYP (bit [3:0][3:0])) mod_byte (clk, cnt_ar2d, siz_ar2d);
+   mod_typ #(.TYP (bit           )) mod_bit  (clk, cnt_bit [ 1-1:0], siz_bit );
+   mod_typ #(.TYP (byte          )) mod_byte (clk, cnt_byte[ 8-1:0], siz_byte);
+   mod_typ #(.TYP (int           )) mod_int  (clk, cnt_int [32-1:0], siz_int );
+   mod_typ #(.TYP (bit [23:0]    )) mod_ar1d (clk, cnt_ar1d[24-1:0], siz_ar1d);
+   mod_typ #(.TYP (bit [3:0][3:0])) mod_ar2d (clk, cnt_ar2d[16-1:0], siz_ar2d);
 
 endmodule : t
 
@@ -59,9 +59,9 @@ module mod_typ #(
    output int   siz
 );
 
-always @ (posedge clk)
-cnt <= cnt + 1;
+   always @ (posedge clk)
+   cnt <= cnt + 1;
 
-assign siz = $bits (cnt);
+   assign siz = $bits (cnt);
 
 endmodule  
