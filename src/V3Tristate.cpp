@@ -233,7 +233,7 @@ private:
         AstVar* enp = new AstVar (outrefp->varp()->fileline(),
 				  AstVarType::MODULETEMP,
 				  outrefp->name() + "__en" + suffix + cvtToStr(m_unique++),
-				  AstLogicPacked(), width);
+				  VFlagLogicPacked(), width);
 	enp->varType2Out();
 
 	if (enp->width() != enrhsp->width()) {
@@ -412,7 +412,7 @@ private:
 		AstVar* newlhsp = new AstVar(lhsp->fileline(),
 					     AstVarType::MODULETEMP,
 					     lhsp->name()+"__lhs"+cvtToStr(m_unique++),
-					     AstLogicPacked(), w);
+					     VFlagLogicPacked(), w);
 		nodep->addStmtp(newlhsp);
 
 		// now append this driver to the driver logic.
@@ -427,7 +427,7 @@ private:
 		    bitselp = new AstVar(lhsp->fileline(),
 					 AstVarType::MODULETEMP,
 					 lhsp->name()+"__sel"+cvtToStr(m_unique-1),
-					 AstLogicPacked(), ws);
+					 VFlagLogicPacked(), ws);
 		    //
 		    nodep->addStmtp(bitselp);
 		    nodep->addStmtp(new AstAssignW(lhsp->fileline(),
@@ -656,6 +656,18 @@ private:
     virtual void visit(AstVar* nodep, AstNUser*) {
 	if (m_state == CONVERT_VARS) {
 	    if (nodep->isTristate() && !m_ftaskp) {
+		// Add pullups/pulldowns so next stage can ignore wire type
+		// See test_regress/t/t_tri_pull01.v test, it fails for other reasons
+		//if (nodep->varType() == AstVarType::TRIWIRE0) {
+		//    nodep->addNext(new AstPull(nodep->fileline(),
+		//			       new AstVarRef(nodep->fileline(), nodep, true),
+		//			       false));
+		//}
+		//if (nodep->varType() == AstVarType::TRIWIRE1) {
+		//    nodep->addNext(new AstPull(nodep->fileline(),
+		//			       new AstVarRef(nodep->fileline(), nodep, true),
+		//			       true));
+		//}
 		// create the input var and leave the original as the output var
 		AstVar* varinp = nodep->cloneTree(false)->castVar();
 		varinp->name(varinp->name() + "__in");

@@ -68,10 +68,10 @@ private:
     AstUser3InUse	m_inuser3;
 
     // Checking:
-    //  AstVarScope::user1()	-> VarUsage.  Set true to indicate tracking as lvalue/rvalue
+    //  AstVar(Scope)::user1()	-> VarUsage.  Set true to indicate tracking as lvalue/rvalue
     // Simulating:
-    //  AstVarScope::user3()	-> V3Number*. Input value of variable or node (and output for non-delayed assignments)
-    //  AstVarScope::user2()	-> V3Number*. Output value of variable (delayed assignments)
+    //  AstVar(Scope)::user3()	-> V3Number*. Input value of variable or node (and output for non-delayed assignments)
+    //  AstVar(Scope)::user2()	-> V3Number*. Output value of variable (delayed assignments)
 
     enum VarUsage { VU_NONE=0, VU_LV=1, VU_RV=2, VU_LVDLY=4 };
 
@@ -144,6 +144,7 @@ private:
 	    nump = new V3Number (nodep->fileline(), nodep->width(), value);
 	    m_numAllps.push_back(nump);
 	}
+	nump->isDouble(nodep->isDouble());
 	return nump;
     }
 public:

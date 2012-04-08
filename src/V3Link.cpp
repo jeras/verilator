@@ -198,7 +198,7 @@ private:
 		}
 	    }
 	    AstVar* newp = new AstVar (forrefp->fileline(), AstVarType::WIRE,
-				       forrefp->name(), AstLogicPacked(), 1);
+				       forrefp->name(), VFlagLogicPacked(), 1);
 
 	    newp->trace(m_modp->modTrace());
 	    m_modp->addStmtp(newp);
@@ -431,7 +431,8 @@ private:
 		// also return the class reference.
 		if (dtypep) dtypep->unlinkFrBack();
 		else dtypep = new AstBasicDType(nodep->fileline(), AstBasicDTypeKwd::LOGIC);
-		AstVar* newvarp = new AstVar(nodep->fileline(), AstVarType::OUTPUT, nodep->name(), dtypep);
+		AstVar* newvarp = new AstVar(nodep->fileline(), AstVarType::OUTPUT, nodep->name(),
+					     VFlagChildDType(), dtypep);  // Not dtype resolved yet
 		if (nodep->isSigned()) newvarp->numeric(AstNumeric::SIGNED);
 		newvarp->funcReturn(true);
 		newvarp->trace(false);  // Not user visible

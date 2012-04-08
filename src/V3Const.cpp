@@ -385,7 +385,7 @@ private:
 		else if ((nodep->msbConst() > bdtypep->msbMaxSelect())
 			 || (nodep->lsbConst() > bdtypep->msbMaxSelect())) {
 		    // See also warning in V3Width
-		    nodep->v3error("Selection index out of range: "
+		    nodep->v3warn(SELRANGE, "Selection index out of range: "
 				   <<nodep->msbConst()<<":"<<nodep->lsbConst()
 				   <<" outside "<<bdtypep->msbMaxSelect()<<":0"
 				   <<(bdtypep->lsb()>=0 ? ""
@@ -858,9 +858,9 @@ private:
 		string name1 = ((string)"__Vconcswap"+cvtToStr(m_modp->varNumGetInc()));
 		string name2 = ((string)"__Vconcswap"+cvtToStr(m_modp->varNumGetInc()));
 		AstVar* temp1p = new AstVar(sel1p->fileline(), AstVarType::BLOCKTEMP, name1,
-					    AstLogicPacked(), msb1-lsb1+1);
+					    VFlagLogicPacked(), msb1-lsb1+1);
 		AstVar* temp2p = new AstVar(sel2p->fileline(), AstVarType::BLOCKTEMP, name2,
-					    AstLogicPacked(), msb2-lsb2+1);
+					    VFlagLogicPacked(), msb2-lsb2+1);
 		m_modp->addStmtp(temp1p);
 		m_modp->addStmtp(temp2p);
 		AstNodeAssign* asn1ap=nodep->cloneType

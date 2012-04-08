@@ -81,6 +81,7 @@ public:
 	MULTIDRIVEN,	// Driven from multiple blocks
 	REALCVT,	// Real conversion
 	REDEFMACRO,	// Redefining existing define macro
+	SELRANGE,	// Selection index out of range
 	STMTDLY,	// Delayed statement
 	SYMRSVDWORD,	// Symbol is Reserved Word
 	SYNCASYNCNET,	// Mixed sync + async reset
@@ -120,7 +121,7 @@ public:
 	    "LITENDIAN", "MODDUP",
 	    "MULTIDRIVEN",
 	    "REALCVT", "REDEFMACRO",
-	    "STMTDLY", "SYMRSVDWORD", "SYNCASYNCNET",
+	    "SELRANGE", "STMTDLY", "SYMRSVDWORD", "SYNCASYNCNET",
 	    "UNDRIVEN", "UNOPT", "UNOPTFLAT", "UNSIGNED", "UNUSED",
 	    "VARHIDDEN", "WIDTH", "WIDTHCONCAT",
 	    " MAX"
@@ -244,10 +245,10 @@ template< class T> std::string cvtToStr (const T& t) {
     ostringstream os; os<<t; return os.str();
 }
 
-inline uint32_t cvtToHash(void* vp) {
+inline uint32_t cvtToHash(const void* vp) {
     // We can shove a 64 bit pointer into a 32 bit bucket
     // On 32 bit systems, lower is always 0, but who cares?
-    union { void* up; struct {uint32_t upper; uint32_t lower;} l;} u;
+    union { const void* up; struct {uint32_t upper; uint32_t lower;} l;} u;
     u.l.upper=0; u.l.lower=0; u.up=vp;
     return u.l.upper^u.l.lower;
 }
