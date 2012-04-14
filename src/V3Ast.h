@@ -1,4 +1,4 @@
-// -*- C++ -*-
+// -*- mode: C++; c-file-style: "cc-mode" -*-
 //*************************************************************************
 // DESCRIPTION: Verilator: Ast node structure
 //
@@ -254,7 +254,9 @@ public:
 	// Internal types for mid-steps
 	SCOPEPTR, CHARPTR,
 	// Internal types, eliminated after parsing
-	LOGIC_IMPLICIT
+	LOGIC_IMPLICIT,
+	// Leave last
+	_ENUM_MAX
     };
     enum en m_e;
     const char* ascii() const {
@@ -264,7 +266,8 @@ public:
 	    "real", "shortint", "shortreal", "time",
 	    "string",
 	    "VerilatedScope*", "char*",
-	    "LOGIC_IMPLICIT"
+	    "LOGIC_IMPLICIT",
+	    " MAX"
 	};
 	return names[m_e];
     };
@@ -275,10 +278,15 @@ public:
 	    "double", "short int", "float", "long long",
 	    "const char*",
 	    "dpiScope", "const char*",
-	    ""
+	    "",
+	    " MAX"
 	};
 	return names[m_e];
     };
+    static void test() {
+	UASSERT(0==strcmp(AstBasicDTypeKwd(_ENUM_MAX).ascii()," MAX"),"Enum array mismatch");
+	UASSERT(0==strcmp(AstBasicDTypeKwd(_ENUM_MAX).dpiType()," MAX"),"Enum array mismatch");
+    }
     inline AstBasicDTypeKwd () : m_e(UNKNOWN) {}
     inline AstBasicDTypeKwd (en _e) : m_e(_e) {}
     explicit inline AstBasicDTypeKwd (int _e) : m_e(static_cast<en>(_e)) {}
@@ -868,7 +876,6 @@ public:
     void	numericFrom(AstNode* fromp) { numeric(fromp->numeric()); }
     void	numeric(AstNumeric flag) { m_numeric = (int)flag; if (flag.isDouble()) width(64,64); }
     AstNumeric	numeric() const { return AstNumeric(m_numeric); }
-    void	isSigned(bool flag) { numeric(flag ? AstNumeric::SIGNED : AstNumeric::UNSIGNED); }
     bool	isUnsigned() const { return numeric().isUnsigned(); }
     void	didWidth(bool flag) { m_didWidth=flag; }
     bool	didWidth() const { return m_didWidth; }
@@ -942,6 +949,7 @@ public:
     bool	isAllOnesV();  // Verilog width rules apply
 
     // METHODS - data type changes especially for initial creation
+    void	dtypeChgSigned(bool flag) { numeric(flag ? AstNumeric::SIGNED : AstNumeric::UNSIGNED); }
     void	dtypeSetBitSized(int widthf, int widthMinf, AstNumeric numericf) { numeric(numericf); width(widthf,widthMinf); }
     void	dtypeSetLogicSized(int widthf, int widthMinf, AstNumeric numericf) { numeric(numericf); width(widthf,widthMinf); }
     void	dtypeSetLogicBool()	{ numeric(AstNumeric::UNSIGNED); width(1,1); }
@@ -994,6 +1002,7 @@ public:
     virtual int  instrCount() const { return 0; }
     virtual V3Hash sameHash() const { return V3Hash(V3Hash::Illegal()); }  // Not a node that supports it
     virtual bool same(AstNode* otherp) const { return true; }
+    virtual bool hasDType() const { return false; }	// Iff has a data type; dtype() must be non null
     virtual bool maybePointedTo() const { return false; }  // Another AstNode* may have a pointer into this node, other then normal front/back/etc.
     virtual bool broken() const { return false; }
 
@@ -1030,6 +1039,7 @@ struct AstNodeMath : public AstNode {
 	: AstNode(fl) {}
     ASTNODE_BASE_FUNCS(NodeMath)
     // METHODS
+    virtual bool hasDType() const { return true; }
     virtual string emitVerilog() = 0;  /// Format string for verilog writing; see V3EmitV
     virtual string emitC() = 0;
     virtual string emitSimpleOperator() { return ""; }
@@ -1196,6 +1206,7 @@ struct AstNodeAssign : public AstNodeStmt {
     AstNode* lhsp()		const { return op2p()->castNode(); }	// op2 = Assign to
     void rhsp(AstNode* np) { setOp1p(np); }
     void lhsp(AstNode* np) { setOp2p(np); }
+    virtual bool hasDType() const { return true; }
     virtual bool cleanRhs() { return true; }
     virtual int  instrCount() const { return widthInstrs(); }
     virtual V3Hash sameHash() const { return V3Hash(); }
@@ -1292,6 +1303,7 @@ public:
 	init();
     }
     ASTNODE_BASE_FUNCS(NodeVarRef)
+    virtual bool hasDType() const { return true; }
     virtual bool broken() const;
     virtual int instrCount() const { return widthInstrs(); }
     virtual void cloneRelink();
@@ -1338,6 +1350,7 @@ struct AstNodeDType : public AstNode {
     ASTNODE_BASE_FUNCS(NodeDType)
     // Accessors
     virtual void dump(ostream& str);
+    virtual bool hasDType() const { return true; }
     virtual AstBasicDType* basicp() const = 0;  // (Slow) recurse down to find basic data type
     virtual AstNodeDType* skipRefp() const = 0;  // recurses over typedefs to next non-typeref type
     virtual int widthAlignBytes() const = 0; // (Slow) recurses - Structure alignment 1,2,4 or 8 bytes (arrays affect this)
@@ -1358,6 +1371,7 @@ struct AstNodeSel : public AstNodeBiop {
     AstNode* bitp() const { return op2p()->castNode(); }	// op2 = Msb selection expression
     void bitp(AstNode* nodep) { setOp2p(nodep); }
     int	     bitConst()	const;
+    virtual bool hasDType() const { return true; }
 };
 
 //######################################################################
