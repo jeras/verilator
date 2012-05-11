@@ -52,15 +52,15 @@ module t (/*AUTOARG*/
       else if (cnt[30:2]==2)  vector_bg <= '{0:3, 1:2, 2:1, 3:0, 4:'0, 5:'1, 6:1'b1, 7:1'b0};
       else if (cnt[30:2]==3)  vector_bg <= '{default:'1};
       else if (cnt[30:2]==4)  vector_bg <= '{2:'1, default:'0};
-      else if (cnt[30:2]==5)  vector_bg <= '{cnt+0, cnt+1, cnt+2, cnt+3};
+      else if (cnt[30:2]==5)  vector_bg <= '{cnt+0, cnt+1, cnt+2, cnt+3, cnt+4, cnt+5, cnt+6, cnt+7};
    end else if (cnt[1:0]==2'd2) begin
       // chack vector agains expected value
       if      (cnt[30:2]==0)  begin if (vector_bg !== 8'bxxxxxxxx) begin $display("%b", vector_bg); $stop(); end end
-      else if (cnt[30:2]==1)  begin if (vector_bg !== 8'b00010000) begin $display("%b", vector_bg); $stop(); end end
-      else if (cnt[30:2]==2)  begin if (vector_bg !== 8'b01010100) begin $display("%b", vector_bg); $stop(); end end
-      else if (cnt[30:2]==3)  begin if (vector_bg !== 8'b11011101) begin $display("%b", vector_bg); $stop(); end end
-      else if (cnt[30:2]==4)  begin if (vector_bg !== 8'b11011101) begin $display("%b", vector_bg); $stop(); end end
-      else if (cnt[30:2]==5)  begin if (vector_bg !== 8'b10111100) begin $display("%b", vector_bg); $stop(); end end
+      else if (cnt[30:2]==1)  begin if (vector_bg !== 8'b10100110) begin $display("%b", vector_bg); $stop(); end end
+      else if (cnt[30:2]==2)  begin if (vector_bg !== 8'b01100101) begin $display("%b", vector_bg); $stop(); end end
+      else if (cnt[30:2]==3)  begin if (vector_bg !== 8'b11111111) begin $display("%b", vector_bg); $stop(); end end
+      else if (cnt[30:2]==4)  begin if (vector_bg !== 8'b00000100) begin $display("%b", vector_bg); $stop(); end end
+      else if (cnt[30:2]==5)  begin if (vector_bg !== 8'b10101010) begin $display("%b", vector_bg); $stop(); end end
    end
 
    // little endian
@@ -80,15 +80,15 @@ module t (/*AUTOARG*/
       else if (cnt[30:2]==2)  vector_lt <= '{0:3, 1:2, 2:1, 3:0, 4:'0, 5:'1, 6:1'b1, 7:1'b0};
       else if (cnt[30:2]==3)  vector_lt <= '{default:'1};
       else if (cnt[30:2]==4)  vector_lt <= '{2:'1, default:'0};
-      else if (cnt[30:2]==5)  vector_lt <= '{cnt+0, cnt+1, cnt+2, cnt+3};
+      else if (cnt[30:2]==5)  vector_lt <= '{cnt+0, cnt+1, cnt+2, cnt+3, cnt+4, cnt+5, cnt+6, cnt+7};
    end else if (cnt[1:0]==2'd2) begin
       // chack vector agains expected value
       if      (cnt[30:2]==0)  begin if (vector_lt !== 8'bxxxxxxxx) begin $display("%b", vector_lt); $stop(); end end
-      else if (cnt[30:2]==1)  begin if (vector_lt !== 8'b00010000) begin $display("%b", vector_lt); $stop(); end end
-      else if (cnt[30:2]==2)  begin if (vector_lt !== 8'b01010100) begin $display("%b", vector_lt); $stop(); end end
-      else if (cnt[30:2]==3)  begin if (vector_lt !== 8'b11011101) begin $display("%b", vector_lt); $stop(); end end
-      else if (cnt[30:2]==4)  begin if (vector_lt !== 8'b11011101) begin $display("%b", vector_lt); $stop(); end end
-      else if (cnt[30:2]==5)  begin if (vector_lt !== 8'b10111100) begin $display("%b", vector_lt); $stop(); end end
+      else if (cnt[30:2]==1)  begin if (vector_lt !== 8'b10100110) begin $display("%b", vector_lt); $stop(); end end
+      else if (cnt[30:2]==2)  begin if (vector_lt !== 8'b10100110) begin $display("%b", vector_lt); $stop(); end end
+      else if (cnt[30:2]==3)  begin if (vector_lt !== 8'b11111111) begin $display("%b", vector_lt); $stop(); end end
+      else if (cnt[30:2]==4)  begin if (vector_lt !== 8'b00100000) begin $display("%b", vector_lt); $stop(); end end
+      else if (cnt[30:2]==5)  begin if (vector_lt !== 8'b10101010) begin $display("%b", vector_lt); $stop(); end end
    end
 
 endmodule
