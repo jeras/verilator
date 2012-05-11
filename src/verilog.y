@@ -137,8 +137,14 @@ public:
 		    finalp->unlinkFrBack();
 		    rangearraysp = rangesp;
 		}
+		if (dtypep->implicit()) {
+		    // It's no longer implicit but a real logic type
+		    AstBasicDType* newp = new AstBasicDType(dtypep->fileline(), AstBasicDTypeKwd::LOGIC,
+							    dtypep->numeric(), dtypep->width(), dtypep->widthMin());
+		    dtypep->deleteTree();  dtypep=NULL;
+		    dtypep = newp;
+		}
 		dtypep->rangep(finalp);
-	       	dtypep->implicit(false);
 	    }
 	    return createArray(dtypep, rangearraysp, isPacked);
 	}
@@ -376,6 +382,8 @@ class AstSenTree;
 %token<fl>		yTRANIF0	"tranif0"
 %token<fl>		yTRANIF1	"tranif1"
 %token<fl>		yTRI		"tri"
+%token<fl>		yTRI0		"tri0"
+%token<fl>		yTRI1		"tri1"
 %token<fl>		yTRUE		"true"
 %token<fl>		yTYPEDEF	"typedef"
 %token<fl>		yUNIQUE		"unique"
@@ -866,9 +874,9 @@ portDirNetE:			// IEEE: part of port, optional net type and/or direction
 		/* empty */				{ }
 	//			// Per spec, if direction given default the nettype.
 	//			// The higher level rule may override this VARDTYPE with one later in the parse.
-	|	port_direction				{ VARDECL(PORT); VARDTYPE(NULL/*default_nettype*/); }
-	|	port_direction net_type			{ VARDECL(PORT); VARDTYPE(NULL/*default_nettype*/); } // net_type calls VARNET
-	|	net_type				{ } // net_type calls VARNET
+	|	port_direction					{ VARDECL(PORT); VARDTYPE(NULL/*default_nettype*/); }
+	|	port_direction { VARDECL(PORT); } net_type	{ VARDTYPE(NULL/*default_nettype*/); } // net_type calls VARNET
+	|	net_type					{ } // net_type calls VARNET
  	;
 
 port_declNetE:			// IEEE: part of port_declaration, optional net type
@@ -1007,8 +1015,8 @@ net_type:			// ==IEEE: net_type
 		ySUPPLY0				{ VARDECL(SUPPLY0); }
 	|	ySUPPLY1				{ VARDECL(SUPPLY1); }
 	|	yTRI 					{ VARDECL(TRIWIRE); }
-	//UNSUP	yTRI0 					{ VARDECL(TRI0); }
-	//UNSUP	yTRI1 					{ VARDECL(TRI1); }
+	|	yTRI0 					{ VARDECL(TRI0); }
+	|	yTRI1 					{ VARDECL(TRI1); }
 	//UNSUP	yTRIAND 				{ VARDECL(TRIAND); }
 	//UNSUP	yTRIOR 					{ VARDECL(TRIOR); }
 	//UNSUP	yTRIREG 				{ VARDECL(TRIREG); }
@@ -1103,7 +1111,7 @@ non_integer_type<bdtypep>:	// ==IEEE: non_integer_type
 	;
 
 signingE<signstate>:		// IEEE: signing - plus empty
-		/*empty*/ 				{ $$ = signedst_NOSIGNED; }
+		/*empty*/ 				{ $$ = signedst_NOSIGN; }
 	|	signing					{ $$ = $1; }
 	;
 
@@ -1729,6 +1737,9 @@ instnameParen<nodep>:
 		id instRangeE '(' cellpinList ')'	{ $$ = new AstCell($<fl>1,*$1,GRAMMARP->m_instModule,$4,  GRAMMARP->m_instParamp,$2); }
 	|	id instRangeE 				{ $$ = new AstCell($<fl>1,*$1,GRAMMARP->m_instModule,NULL,GRAMMARP->m_instParamp,$2); }
 	//UNSUP	instRangeE '(' cellpinList ')'		{ UNSUP } // UDP
+	//			// Adding above and switching to the Verilog-Perl syntax
+	//			// causes a shift conflict due to use of idClassSel inside exprScope.
+	//			// It also breaks allowing "id foo;" instantiation syntax.
 	;
 
 instRangeE<rangep>:
@@ -2703,10 +2714,10 @@ gateDecl<nodep>:
 	|	yXNOR delayE gateXnorList ';'		{ $$ = $3; }
 	|	yPULLUP delayE gatePullupList ';'	{ $$ = $3; }
 	|	yPULLDOWN delayE gatePulldownList ';'	{ $$ = $3; }
+	|	yNMOS delayE gateBufif1List ';'		{ $$ = $3; }  // ~=bufif1, as don't have strengths yet
+	|	yPMOS delayE gateBufif0List ';'		{ $$ = $3; }  // ~=bufif0, as don't have strengths yet
 	//
 	|	yTRAN delayE gateUnsupList ';'		{ $$ = $3; GATEUNSUP($3,"tran"); } // Unsupported
-	|	yNMOS delayE gateUnsupList ';'		{ $$ = $3; GATEUNSUP($3,"nmos"); } // Unsupported
-	|	yPMOS delayE gateUnsupList ';'		{ $$ = $3; GATEUNSUP($3,"pmos"); } // Unsupported
 	|	yRCMOS delayE gateUnsupList ';'		{ $$ = $3; GATEUNSUP($3,"rcmos"); } // Unsupported
 	|	yCMOS delayE gateUnsupList ';'		{ $$ = $3; GATEUNSUP($3,"cmos"); } // Unsupported
 	|	yRNMOS delayE gateUnsupList ';'		{ $$ = $3; GATEUNSUP($3,"rmos"); } // Unsupported
@@ -3264,9 +3275,9 @@ AstVar* V3ParseGrammar::createVariable(FileLine* fileline, string name, AstRange
     if (GRAMMARP->m_varDecl == AstVarType::SUPPLY1) {
 	nodep->addNext(V3ParseGrammar::createSupplyExpr(fileline, nodep->name(), 1));
     }
-    // Clear any widths that got presumed by the ranging;
+    // Don't set dtypep in the ranging;
     // We need to autosize parameters and integers separately
-    nodep->width(0,0);
+    //
     // Propagate from current module tracing state
     if (nodep->isGenVar() || nodep->isParam()) nodep->trace(false);
     else nodep->trace(v3Global.opt.trace() && nodep->fileline()->tracingOn());

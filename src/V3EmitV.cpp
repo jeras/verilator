@@ -384,6 +384,7 @@ class EmitVBaseVisitor : public EmitCBaseVisitor {
 	//	%l	lhsp - if appropriate
 	//	%r	rhsp - if appropriate
 	//	%t	thsp - if appropriate
+	//	%d	dtypep - if appropriate
 	//	%k	Potential line break
 	bool inPct = false;
 	putbs("");
@@ -411,6 +412,11 @@ class EmitVBaseVisitor : public EmitCBaseVisitor {
 		case 't': {
 		    if (!thsp) { nodep->v3fatalSrc("emitVerilog() references undef node"); }
 		    else thsp->iterateAndNext(*this);
+		    break;
+		}
+		case 'd': {
+		    if (!nodep->dtypep()) { nodep->v3fatalSrc("emitVerilog() references undef node"); }
+		    else nodep->dtypep()->iterateAndNext(*this);
 		    break;
 		}
 		default:
@@ -491,7 +497,11 @@ class EmitVBaseVisitor : public EmitCBaseVisitor {
     }
     virtual void visit(AstConstDType* nodep, AstNUser*) {
 	putfs(nodep,"const ");
-	nodep->dtypep()->iterateAndNext(*this);
+	nodep->subDTypep()->iterateAndNext(*this);
+    }
+    virtual void visit(AstArrayDType* nodep, AstNUser*) {
+	nodep->subDTypep()->iterateAndNext(*this);
+	nodep->rangep()->iterateAndNext(*this);
     }
     virtual void visit(AstNodeFTaskRef* nodep, AstNUser*) {
 	if (nodep->dotted()!="") { putfs(nodep,nodep->dotted()); puts("."); puts(nodep->prettyName()); }

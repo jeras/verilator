@@ -61,28 +61,40 @@ public:
 
 //######################################################################
 
+enum VSignedState {
+    // This can't be in the fancy class as the lexer union will get upset
+    signedst_UNSIGNED=0, signedst_SIGNED=1, signedst_NOSIGN=2
+};
+
+//######################################################################
+
 class AstNumeric {
 public:
     enum en {
 	UNSIGNED,
 	SIGNED,
-	DOUBLE
-	// Limited to 2 bits, unless change V3Ast's packing function
+	NOSIGN,
+	_ENUM_MAX	// Leave last
     };
     enum en m_e;
     const char* ascii() const {
 	static const char* names[] = {
-	    "UNSIGNED","SIGNED","DOUBLE"
+	    "UNSIGNED","SIGNED","NOSIGN"
 	};
 	return names[m_e];
     };
     inline AstNumeric () : m_e(UNSIGNED) {}
     inline AstNumeric (en _e) : m_e(_e) {}
+    inline AstNumeric (VSignedState signst) {
+	if (signst==signedst_UNSIGNED) m_e=UNSIGNED;
+	else if (signst==signedst_SIGNED) m_e=SIGNED;
+	else m_e=NOSIGN;
+    }
     explicit inline AstNumeric (int _e) : m_e(static_cast<en>(_e)) {}
     operator en () const { return m_e; }
-    inline bool isDouble() const { return m_e==DOUBLE; }
     inline bool isSigned() const { return m_e==SIGNED; }
-    inline bool isUnsigned() const { return m_e==UNSIGNED; }
+    inline bool isNosign() const { return m_e==NOSIGN; }
+    // No isUnsigned() as it's ambiguous if NOSIGN should be included or not.
   };
   inline bool operator== (AstNumeric lhs, AstNumeric rhs) { return (lhs.m_e == rhs.m_e); }
   inline bool operator== (AstNumeric lhs, AstNumeric::en rhs) { return (lhs.m_e == rhs); }
@@ -253,6 +265,8 @@ public:
 	STRING,
 	// Internal types for mid-steps
 	SCOPEPTR, CHARPTR,
+	// Unsigned and two state; fundamental types
+	UINT32, UINT64,
 	// Internal types, eliminated after parsing
 	LOGIC_IMPLICIT,
 	// Leave last
@@ -266,6 +280,7 @@ public:
 	    "real", "shortint", "shortreal", "time",
 	    "string",
 	    "VerilatedScope*", "char*",
+	    "IData", "QData",
 	    "LOGIC_IMPLICIT",
 	    " MAX"
 	};
@@ -278,7 +293,8 @@ public:
 	    "double", "short int", "float", "long long",
 	    "const char*",
 	    "dpiScope", "const char*",
-	    "",
+	    "IData", "QData",
+	    "svLogic",  // Though shouldn't be needed
 	    " MAX"
 	};
 	return names[m_e];
@@ -307,11 +323,18 @@ public:
 	case STRING:	return 64;  // opaque  // Just the pointer, for today
 	case SCOPEPTR:	return 0;   // opaque
 	case CHARPTR:	return 0;   // opaque
+	case UINT32:	return 32;
+	case UINT64:	return 64;
 	default: return 0;
 	}
     }
     bool isSigned() const {
-	return m_e==BYTE || m_e==SHORTINT || m_e==INT || m_e==LONGINT || m_e==INTEGER;
+	return m_e==BYTE || m_e==SHORTINT || m_e==INT || m_e==LONGINT || m_e==INTEGER
+	    || m_e==DOUBLE || m_e==FLOAT;
+    }
+    bool isUnsigned() const {
+	return m_e==CHANDLE || m_e==STRING || m_e==SCOPEPTR || m_e==CHARPTR
+	    || m_e==UINT32 || m_e==UINT64;
     }
     bool isFourstate() const {
 	return m_e==INTEGER || m_e==LOGIC || m_e==LOGIC_IMPLICIT;
@@ -319,6 +342,10 @@ public:
     bool isZeroInit() const { // Otherwise initializes to X
 	return (m_e==BIT || m_e==BYTE || m_e==CHANDLE || m_e==INT || m_e==LONGINT || m_e==SHORTINT
 		|| m_e==STRING || m_e==DOUBLE || m_e==FLOAT);
+    }
+    bool isIntNumeric() const { // Enum increment supported
+	return (m_e==BIT || m_e==BYTE || m_e==INT || m_e==INTEGER || m_e==LOGIC
+		|| m_e==LONGINT || m_e==SHORTINT || m_e==UINT32 || m_e==UINT64);
     }
     bool isSloppy() const { // Don't be as anal about width warnings
 	return !(m_e==LOGIC || m_e==BIT);
@@ -342,13 +369,6 @@ public:
 
 //######################################################################
 
-enum AstSignedState {
-    // This can't be in the fancy class as the lexer union will get upset
-    signedst_NOSIGNED=0, signedst_UNSIGNED=1, signedst_SIGNED=2
-};
-
-//######################################################################
-
 class AstVarType {
 public:
     enum en {
@@ -365,6 +385,8 @@ public:
 	WIRE,
 	IMPLICITWIRE,
 	TRIWIRE,
+	TRI0,
+	TRI1,
 	PORT,		// Temp type used in parser only
 	BLOCKTEMP,
 	MODULETEMP,
@@ -380,9 +402,16 @@ public:
 	static const char* names[] = {
 	    "?","GPARAM","LPARAM","GENVAR",
 	    "VAR","INPUT","OUTPUT","INOUT",
-	    "SUPPLY0","SUPPLY1","WIRE","IMPLICITWIRE","TRIWIRE","PORT",
+	    "SUPPLY0","SUPPLY1","WIRE","IMPLICITWIRE",
+	    "TRIWIRE","TRI0","TRI1",
+	    "PORT",
 	    "BLOCKTEMP","MODULETEMP","STMTTEMP","XTEMP"};
 	return names[m_e]; }
+    bool isSignal() const  { return (m_e==WIRE || m_e==IMPLICITWIRE
+				     || m_e==TRIWIRE
+				     || m_e==TRI0 || m_e==TRI1
+				     || m_e==SUPPLY0 || m_e==SUPPLY1
+				     || m_e==VAR); }
   };
   inline bool operator== (AstVarType lhs, AstVarType rhs) { return (lhs.m_e == rhs.m_e); }
   inline bool operator== (AstVarType lhs, AstVarType::en rhs) { return (lhs.m_e == rhs); }
@@ -492,6 +521,83 @@ public:
   inline bool operator== (AstParseRefExp lhs, AstParseRefExp::en rhs) { return (lhs.m_e == rhs); }
   inline bool operator== (AstParseRefExp::en lhs, AstParseRefExp rhs) { return (lhs == rhs.m_e); }
   inline ostream& operator<<(ostream& os, AstParseRefExp rhs) { return os<<rhs.ascii(); }
+
+//######################################################################
+// VNumRange - Structure containing numberic range information
+// See also AstRange, which is a symbolic version of this
+
+struct VNumRange {
+    int		m_msb;		// MSB, MSB always >= LSB
+    int		m_lsb;		// LSB
+    union {
+	int mu_flags;
+	struct {
+	    bool m_ranged:1;		// Has a range
+	    bool m_littleEndian:1;	// Bit vector is little endian
+	};
+    };
+    inline bool operator== (const VNumRange& rhs) const {
+	return m_msb == rhs.m_msb
+	    && m_lsb == rhs.m_lsb
+	    && mu_flags == rhs.mu_flags; }
+    inline bool operator< (const VNumRange& rhs) const {
+	if ( (m_msb <  rhs.m_msb)) return true;
+	if (!(m_msb == rhs.m_msb)) return false;  // lhs > rhs
+	if ( (m_lsb <  rhs.m_lsb)) return true;
+	if (!(m_lsb == rhs.m_lsb)) return false;  // lhs > rhs
+	if ( (mu_flags <  rhs.mu_flags)) return true;
+	if (!(mu_flags == rhs.mu_flags)) return false;  // lhs > rhs
+	return false;
+    }
+    //
+    VNumRange() : m_msb(0), m_lsb(0), m_ranged(false), m_littleEndian(false) {}
+    ~VNumRange() {}
+    // MEMBERS
+    void init(int msb, int lsb, bool littleEndian) {
+	m_msb=msb; m_lsb=lsb; mu_flags=0; m_ranged=true; m_littleEndian=littleEndian;
+    }
+    int msb() const { return m_msb; }
+    int lsb() const { return m_lsb; }
+    int left() const { return littleEndian()?lsb():msb(); }  // How to show a declaration
+    int right() const { return littleEndian()?msb():lsb(); }
+    bool ranged() const { return m_ranged; }
+    bool littleEndian() const { return m_littleEndian; }
+    bool representableByWidth() const  // Could be represented by just width=1, or [width-1:0]
+	{ return (!m_ranged || (m_lsb==0 && m_msb>=1 && !m_littleEndian)); }
+};
+
+//######################################################################
+
+struct VBasicTypeKey {
+    int		m_width;	// From AstNodeDType: Bit width of operation
+    int		m_widthMin;	// From AstNodeDType: If unsized, bitwidth of minimum implementation
+    AstNumeric	m_numeric;	// From AstNodeDType: Node is signed
+    AstBasicDTypeKwd m_keyword;	// From AstBasicDType: What keyword created basic type
+    VNumRange	m_nrange;	// From AstBasicDType: Numeric msb/lsb (if non-opaque keyword)
+    inline bool operator== (const VBasicTypeKey& rhs) const {
+	return m_width == rhs.m_width
+	    && m_widthMin == rhs.m_widthMin
+	    && m_numeric == rhs.m_numeric
+	    && m_keyword == rhs.m_keyword
+	    && m_nrange == rhs.m_nrange; }
+    inline bool operator< (const VBasicTypeKey& rhs) const {
+	if ( (m_width <  rhs.m_width)) return true;
+	if (!(m_width == rhs.m_width)) return false;  // lhs > rhs
+	if ( (m_widthMin <  rhs.m_widthMin)) return true;
+	if (!(m_widthMin == rhs.m_widthMin)) return false;  // lhs > rhs
+	if ( (m_numeric <  rhs.m_numeric)) return true;
+	if (!(m_numeric == rhs.m_numeric)) return false;  // lhs > rhs
+	if ( (m_keyword <  rhs.m_keyword)) return true;
+	if (!(m_keyword == rhs.m_keyword)) return false;  // lhs > rhs
+	if ( (m_nrange <  rhs.m_nrange)) return true;
+	if (!(m_nrange == rhs.m_nrange)) return false;  // lhs > rhs
+	return false; }
+    VBasicTypeKey(int width, int widthMin, AstNumeric numeric, AstBasicDTypeKwd kwd,
+	     VNumRange nrange)
+	: m_width(width), m_widthMin(widthMin), m_numeric(numeric),
+	  m_keyword(kwd), m_nrange(nrange) {}
+    ~VBasicTypeKey() {}
+};
 
 //######################################################################
 // AstNUser - Generic pointer base class for AST User nodes.
@@ -738,18 +844,17 @@ class AstNode {
     static vluint64_t s_editCntGbl; // Global edit counter
     static vluint64_t s_editCntLast;// Global edit counter, last value for printing * near node #s
 
+    AstNodeDType* m_dtypep;	// Data type of output or assignment (etc)
+
     AstNode*	m_clonep;	// Pointer to clone of/ source of this module (for *LAST* cloneTree() ONLY)
     int		m_cloneCnt;	// Mark of when userp was set
     static int	s_cloneCntGbl;	// Count of which userp is set
 
     // Attributes
-    uint32_t	m_numeric:2;	// Node is real/signed - important that bitfields remain unsigned
     bool	m_didWidth:1;	// Did V3Width computation
     bool	m_doingWidth:1;	// Inside V3Width
     //		// Space for more bools here
 
-    int		m_width;	// Bit width of operation
-    int		m_widthMin;	// If unsized, bitwidth of minimum implementation
     // This member ordering both allows 64 bit alignment and puts associated data together
     AstNUser*	m_user1p;	// Pointer to any information the user iteration routine wants
     uint32_t	m_user1Cnt;	// Mark of when userp was set
@@ -823,6 +928,7 @@ public:
     AstNode*	op2p() const { return m_op2p; }
     AstNode*	op3p() const { return m_op3p; }
     AstNode*	op4p() const { return m_op4p; }
+    AstNodeDType* dtypep() const { return m_dtypep; }
     AstNode*	clonep() const { return ((m_cloneCnt==s_cloneCntGbl)?m_clonep:NULL); }
     AstNode*	firstAbovep() const { return ((backp() && backp()->nextp()!=this) ? backp() : NULL); }  // Returns NULL when second or later in list
     bool	brokeExists() const;
@@ -863,25 +969,18 @@ public:
     string	prettyTypeName() const;			// "VARREF name" for error messages
     FileLine*	fileline() const { return m_fileline; }
     void	fileline(FileLine* fl) { m_fileline=fl; }
-    int		width() const { return m_width; }
-    bool	width1() const { return width()==1; }
-    int		widthWords() const { return VL_WORDS_I(width()); }
-    int		widthMin() const { return m_widthMin?m_widthMin:m_width; }  // If sized, the size, if unsized the min digits to represent it
-    int		widthPow2() const;
-    int		widthInstrs() const { return isWide()?widthWords():1; }
-    bool	widthSized() const { return !m_widthMin || m_widthMin==m_width; }
-    void	width(int width, int sized) { m_width=width; m_widthMin=sized; }
-    void	widthFrom(AstNode* fromp) { if (fromp) { m_width=fromp->m_width; m_widthMin=fromp->m_widthMin; }}
-    void	widthSignedFrom(AstNode* fromp) { widthFrom(fromp); numericFrom(fromp); }
-    void	numericFrom(AstNode* fromp) { numeric(fromp->numeric()); }
-    void	numeric(AstNumeric flag) { m_numeric = (int)flag; if (flag.isDouble()) width(64,64); }
-    AstNumeric	numeric() const { return AstNumeric(m_numeric); }
-    bool	isUnsigned() const { return numeric().isUnsigned(); }
+    bool	width1() const;
+    int		widthInstrs() const;
     void	didWidth(bool flag) { m_didWidth=flag; }
     bool	didWidth() const { return m_didWidth; }
     bool	didWidthAndSet() { if (didWidth()) return true; didWidth(true); return false;}
     void	doingWidth(bool flag) { m_doingWidth=flag; }
     bool	doingWidth() const { return m_doingWidth; }
+
+    //TODO stomp these width functions out, and call via dtypep() instead
+    int		width() const;
+    int		widthMin() const;
+    int		widthWords() const { return VL_WORDS_I(width()); }
     bool	isQuad() const { return (width()>VL_WORDSIZE && width()<=VL_QUADSIZE); }
     bool	isWide() const { return (width()>VL_QUADSIZE); }
     bool	isDouble() const;
@@ -896,6 +995,7 @@ public:
     int		user1() const { return user1p()->castInt(); }
     void	user1(int val) { user1p(AstNUser::fromInt(val)); }
     int		user1Inc() { int v=user1(); user1(v+1); return v; }
+    int		user1SetOnce() { int v=user1(); if (!v) user1(1); return v; } // Better for cache than user1Inc()
     static void	user1ClearTree() { AstUser1InUse::clear(); }  // Clear userp()'s across the entire tree
 
     AstNUser*	user2p() const {
@@ -905,6 +1005,7 @@ public:
     int		user2() const { return user2p()->castInt(); }
     void	user2(int val) { user2p(AstNUser::fromInt(val)); }
     int		user2Inc() { int v=user2(); user2(v+1); return v; }
+    int		user2SetOnce() { int v=user2(); if (!v) user2(1); return v; }
     static void	user2ClearTree() { AstUser2InUse::clear(); }
 
     AstNUser*	user3p() const {
@@ -914,6 +1015,7 @@ public:
     int		user3() const { return user3p()->castInt(); }
     void	user3(int val) { user3p(AstNUser::fromInt(val)); }
     int		user3Inc() { int v=user3(); user3(v+1); return v; }
+    int		user3SetOnce() { int v=user3(); if (!v) user3(1); return v; }
     static void	user3ClearTree() { AstUser3InUse::clear(); }
 
     AstNUser*	user4p() const {
@@ -923,6 +1025,7 @@ public:
     int		user4() const { return user4p()->castInt(); }
     void	user4(int val) { user4p(AstNUser::fromInt(val)); }
     int		user4Inc() { int v=user4(); user4(v+1); return v; }
+    int		user4SetOnce() { int v=user4(); if (!v) user4(1); return v; }
     static void	user4ClearTree() { AstUser4InUse::clear(); }
 
     AstNUser*	user5p() const {
@@ -932,6 +1035,7 @@ public:
     int		user5() const { return user5p()->castInt(); }
     void	user5(int val) { user5p(AstNUser::fromInt(val)); }
     int		user5Inc() { int v=user5(); user5(v+1); return v; }
+    int		user5SetOnce() { int v=user5(); if (!v) user5(1); return v; }
     static void	user5ClearTree() { AstUser5InUse::clear(); }
 
     vluint64_t	editCount() const { return m_editCount; }
@@ -949,14 +1053,29 @@ public:
     bool	isAllOnesV();  // Verilog width rules apply
 
     // METHODS - data type changes especially for initial creation
-    void	dtypeChgSigned(bool flag) { numeric(flag ? AstNumeric::SIGNED : AstNumeric::UNSIGNED); }
-    void	dtypeSetBitSized(int widthf, int widthMinf, AstNumeric numericf) { numeric(numericf); width(widthf,widthMinf); }
-    void	dtypeSetLogicSized(int widthf, int widthMinf, AstNumeric numericf) { numeric(numericf); width(widthf,widthMinf); }
-    void	dtypeSetLogicBool()	{ numeric(AstNumeric::UNSIGNED); width(1,1); }
-    void	dtypeSetDouble()	{ numeric(AstNumeric::DOUBLE); }
-    void	dtypeSetSigned32()	{ numeric(AstNumeric::SIGNED); width(VL_WORDSIZE,VL_WORDSIZE); }
-    void	dtypeSetUInt32()	{ numeric(AstNumeric::UNSIGNED); width(VL_WORDSIZE,VL_WORDSIZE); }
-    void	dtypeSetUInt64()	{ numeric(AstNumeric::UNSIGNED); width(VL_QUADSIZE,VL_QUADSIZE); }
+    void	dtypep(AstNodeDType* nodep) { if (m_dtypep != nodep) { m_dtypep = nodep; editCountInc(); } }
+    void	dtypeFrom(AstNode* fromp) { if (fromp) { dtypep(fromp->dtypep()); }}
+    void	dtypeChgSigned(bool flag=true);
+    void	dtypeChgWidth(int width, int widthMin);
+    void	dtypeChgWidthSigned(int width, int widthMin, bool issigned);
+    void	dtypeSetBitSized(int width, int widthMin, AstNumeric numeric) { dtypep(findBitDType(width,widthMin,numeric)); }
+    void	dtypeSetLogicSized(int width, int widthMin, AstNumeric numeric) { dtypep(findLogicDType(width,widthMin,numeric)); }
+    void	dtypeSetLogicBool()	{ dtypep(findLogicBoolDType()); }
+    void	dtypeSetDouble()	{ dtypep(findDoubleDType()); }
+    void	dtypeSetSigned32()	{ dtypep(findSigned32DType()); }
+    void	dtypeSetUInt32()	{ dtypep(findUInt32DType()); }  // Twostate
+    void	dtypeSetUInt64()	{ dtypep(findUInt64DType()); }  // Twostate
+
+    // Data type locators
+    AstNodeDType* findLogicBoolDType()	{ return findBasicDType(AstBasicDTypeKwd::LOGIC); }
+    AstNodeDType* findDoubleDType()	{ return findBasicDType(AstBasicDTypeKwd::DOUBLE); }
+    AstNodeDType* findSigned32DType()	{ return findBasicDType(AstBasicDTypeKwd::INTEGER); }
+    AstNodeDType* findUInt32DType()	{ return findBasicDType(AstBasicDTypeKwd::UINT32); }  // Twostate
+    AstNodeDType* findUInt64DType()	{ return findBasicDType(AstBasicDTypeKwd::UINT64); }  // Twostate
+    AstNodeDType* findBitDType(int width, int widthMin, AstNumeric numeric);
+    AstNodeDType* findLogicDType(int width, int widthMin, AstNumeric numeric);
+    AstNodeDType* findBasicDType(AstBasicDTypeKwd kwd);
+    AstBasicDType* findInsertSameDType(AstBasicDType* nodep);
 
     // METHODS - dump and error
     void	v3errorEnd(ostringstream& str) const;
@@ -987,6 +1106,7 @@ public:
     void	checkTree();  // User Interface version
     void	dumpPtrs(ostream& str=cout) const;
     void	dumpTree(ostream& str=cout, const string& indent="    ", int maxDepth=0);
+    void	dumpTree(const string& indent, int maxDepth=0) { dumpTree(cout,indent,maxDepth); }
     void	dumpTreeGdb(); // For GDB only
     void	dumpTreeAndNext(ostream& str=cout, const string& indent="    ", int maxDepth=0);
     void	dumpTreeFile(const string& filename, bool append=false);
@@ -1003,6 +1123,7 @@ public:
     virtual V3Hash sameHash() const { return V3Hash(V3Hash::Illegal()); }  // Not a node that supports it
     virtual bool same(AstNode* otherp) const { return true; }
     virtual bool hasDType() const { return false; }	// Iff has a data type; dtype() must be non null
+    virtual AstNodeDType* getChildDTypep() const { return NULL; } // Iff has a non-null childDTypep(), as generic node function
     virtual bool maybePointedTo() const { return false; }  // Another AstNode* may have a pointer into this node, other then normal front/back/etc.
     virtual bool broken() const { return false; }
 
@@ -1064,7 +1185,7 @@ struct AstNodeUniop : public AstNodeMath {
     // Unary math
     AstNodeUniop(FileLine* fl, AstNode* lhsp)
 	: AstNodeMath(fl) {
-	if (lhsp) widthSignedFrom(lhsp);
+	dtypeFrom(lhsp);
 	setOp1p(lhsp); }
     ASTNODE_BASE_FUNCS(NodeUniop)
     AstNode*	lhsp() 	const { return op1p()->castNode(); }
@@ -1144,8 +1265,8 @@ struct AstNodeBiComAsv : public AstNodeBiCom {
 struct AstNodeCond : public AstNodeTriop {
     AstNodeCond(FileLine* fl, AstNode* condp, AstNode* expr1p, AstNode* expr2p)
 	: AstNodeTriop(fl, condp, expr1p, expr2p) {
-	if (expr1p) widthSignedFrom(expr1p);
-	else if (expr2p) widthSignedFrom(expr2p);
+	if (expr1p) dtypeFrom(expr1p);
+	else if (expr2p) dtypeFrom(expr2p);
     }
     ASTNODE_BASE_FUNCS(NodeCond)
     virtual void numberOperate(V3Number& out, const V3Number& lhs, const V3Number& rhs, const V3Number& ths) {
@@ -1197,7 +1318,7 @@ struct AstNodeAssign : public AstNodeStmt {
     AstNodeAssign(FileLine* fl, AstNode* lhsp, AstNode* rhsp)
 	: AstNodeStmt(fl) {
 	setOp1p(rhsp); setOp2p(lhsp);
-	if (lhsp) widthSignedFrom(lhsp);
+	dtypeFrom(lhsp);
     }
     ASTNODE_BASE_FUNCS(NodeAssign)
     virtual AstNode*	cloneType(AstNode* lhsp, AstNode* rhsp)=0;	// Clone single node, just get same type back.
@@ -1345,20 +1466,55 @@ public:
 };
 
 struct AstNodeDType : public AstNode {
-    // Data type
-    AstNodeDType(FileLine* fl) : AstNode(fl) {}
+private:
+    // Ideally width() would migrate to BasicDType as that's where it makes sense,
+    // but it's currently so prevalent in the code we leave it here.
+    // Note the below members are included in AstTypeTable::Key lookups
+    int		m_width;	// (also in AstTypeTable::Key) Bit width of operation
+    int		m_widthMin;	// (also in AstTypeTable::Key) If unsized, bitwidth of minimum implementation
+    AstNumeric	m_numeric;	// (also in AstTypeTable::Key) Node is signed
+    // Other members
+    bool	m_generic;	// Simple globally referenced type, don't garbage collect
+    static int	s_uniqueNum;	// Unique number assigned to each dtype during creation for IEEE matching
+public:
+    // CONSTRUCTORS
+    AstNodeDType(FileLine* fl) : AstNode(fl) {
+	m_width=0; m_widthMin=0; m_generic=false;
+    }
     ASTNODE_BASE_FUNCS(NodeDType)
-    // Accessors
+    // ACCESSORS
     virtual void dump(ostream& str);
+    virtual void dumpSmall(ostream& str);
     virtual bool hasDType() const { return true; }
     virtual AstBasicDType* basicp() const = 0;  // (Slow) recurse down to find basic data type
     virtual AstNodeDType* skipRefp() const = 0;  // recurses over typedefs to next non-typeref type
     virtual int widthAlignBytes() const = 0; // (Slow) recurses - Structure alignment 1,2,4 or 8 bytes (arrays affect this)
     virtual int widthTotalBytes() const = 0; // (Slow) recurses - Width in bytes rounding up 1,2,4,8,12,...
     virtual bool maybePointedTo() const { return true; }
+    virtual AstNodeDType* virtRefDTypep() const { return NULL; } // Iff has a non-null refDTypep(), as generic node function
+    virtual void virtRefDTypep(AstNodeDType* nodep) { }	// Iff has refDTypep(), set as generic node function
+    //
+    // Changing the width may confuse the data type resolution, so must clear TypeTable cache after use.
+    void widthForce(int width, int sized) { m_width=width; m_widthMin=sized; }
+    // For backward compatibility AstArrayDType and others inherit width and signing from the subDType/base type
+    void widthFromSub(AstNodeDType* nodep) { m_width=nodep->m_width; m_widthMin=nodep->m_widthMin; m_numeric=nodep->m_numeric; }
+    //
+    int	width() const { return m_width; }
+    void numeric(AstNumeric flag) { m_numeric = flag; }
+    bool isSigned() const { return m_numeric.isSigned(); }
+    bool isNosign() const { return m_numeric.isNosign(); }
+    AstNumeric numeric() const { return m_numeric; }
+    int	widthWords() const { return VL_WORDS_I(width()); }
+    int	widthMin() const { return m_widthMin?m_widthMin:m_width; }  // If sized, the size, if unsized the min digits to represent it
+    int widthPow2() const;
+    void widthMinFromWidth() { m_widthMin = m_width; }
+    bool widthSized() const { return !m_widthMin || m_widthMin==m_width; }
+    bool generic() const { return m_generic; }
+    void generic(bool flag) { m_generic = flag; }
     AstNodeDType* dtypeDimensionp(int depth);
     pair<uint32_t,uint32_t> dimensions();
     uint32_t	arrayElements();	// 1, or total multiplication of all dimensions
+    static int uniqueNumInc() { return ++s_uniqueNum; }
 };
 
 struct AstNodeSel : public AstNodeBiop {
@@ -1535,8 +1691,12 @@ public:
 //######################################################################
 // Inline ACCESSORS
 
-inline bool AstNode::isDouble() const { return numeric().isDouble(); }
-inline bool AstNode::isSigned() const { return numeric().isSigned(); }
+inline int AstNode::width() const    { return dtypep() ? dtypep()->width() : 0; }
+inline int AstNode::widthMin() const { return dtypep() ? dtypep()->widthMin() : 0; }
+inline bool AstNode::width1() const  { return dtypep() && dtypep()->width()==1; }  // V3Const uses to know it can optimize
+inline int  AstNode::widthInstrs() const { return (!dtypep() ? 1 : (dtypep()->isWide() ? dtypep()->widthWords() : 1)); }
+inline bool AstNode::isDouble() const { return dtypep() && dtypep()->castBasicDType() && dtypep()->castBasicDType()->isDouble(); }
+inline bool AstNode::isSigned() const { return dtypep() && dtypep()->isSigned(); }
 
 inline bool AstNode::isZero()     { return (this->castConst() && this->castConst()->num().isEqZero()); }
 inline bool AstNode::isNeqZero()  { return (this->castConst() && this->castConst()->num().isNeqZero()); }
@@ -1544,6 +1704,6 @@ inline bool AstNode::isOne()      { return (this->castConst() && this->castConst
 inline bool AstNode::isAllOnes()  { return (this->castConst() && this->castConst()->isEqAllOnes()); }
 inline bool AstNode::isAllOnesV() { return (this->castConst() && this->castConst()->isEqAllOnesV()); }
 
-inline void AstNodeVarRef::init() { if (m_varp) widthSignedFrom((AstNode*)m_varp); }
+inline void AstNodeVarRef::init() { if (m_varp) dtypep(m_varp->dtypep()); }
 
 #endif // Guard

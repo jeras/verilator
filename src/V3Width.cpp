@@ -61,6 +61,10 @@
 //	Logicals convert compared to zero
 //	If any operand is real, result is real
 //*************************************************************************
+// V3Width is the only visitor that uses vup.  We could switch to using userp,
+// though note some iterators operate on next() and so would need to pass the
+// same value on each nextp().
+//*************************************************************************
 
 #include "config_build.h"
 #include "verilatedos.h"
@@ -87,11 +91,16 @@ class WidthVP : public AstNUser {
     // Parameters to pass down hierarchy with visit functions.
     int	m_width;	// Expression width, for (2+2), it's 32 bits
     int	m_widthMin;	// Minimum width, for (2+2), it's 2 bits, for 32'2+32'2 it's 32 bits
+    AstNodeDType* m_dtypep;	// Parent's data type to resolve to
     Stage m_stage;	// If true, report errors
 public:
-    WidthVP(int width, int widthMin, Stage stage) : m_width(width), m_widthMin(widthMin), m_stage(stage) {}
+    WidthVP(int width, int widthMin, Stage stage)
+	: m_width(width), m_widthMin(widthMin), m_dtypep(NULL), m_stage(stage) {}
+    WidthVP(AstNodeDType* dtypep, Stage stage)
+	: m_width(0), m_widthMin(0), m_dtypep(dtypep), m_stage(stage) {}
     int width() const { return m_width; }
     int widthMin() const { return m_widthMin?m_widthMin:m_width; }
+    AstNodeDType* dtypep() const { return m_dtypep; }
     bool prelim() const { return m_stage&1; }
     bool final() const { return m_stage&2; }
     char stageAscii() const { return "-PFB"[m_stage]; }
@@ -110,6 +119,8 @@ private:
     AstRange*	m_cellRangep;	// Range for arrayed instantiations, NULL for normal instantiations
     AstNodeCase* m_casep;	// Current case statement CaseItem is under
     AstFunc*	m_funcp;	// Current function
+    AstInitial*	m_initialp;	// Current initial block
+    bool	m_doGenerate;	// Do errors later inside generate statement
 
     // CLASSES
 #define ANYSIZE 0
@@ -277,8 +288,8 @@ private:
 	    int width  = max(vup->c()->width(),    max(nodep->expr1p()->width(),    nodep->expr2p()->width()));
 	    int mwidth = max(vup->c()->widthMin(), max(nodep->expr1p()->widthMin(), nodep->expr2p()->widthMin()));
 	    nodep->dtypeSetLogicSized(width,mwidth,
-				 ((nodep->expr1p()->isSigned() && nodep->expr2p()->isSigned())
-				  ? AstNumeric::SIGNED : AstNumeric::UNSIGNED));
+				      ((nodep->expr1p()->isSigned() && nodep->expr2p()->isSigned())
+				       ? AstNumeric::SIGNED : AstNumeric::UNSIGNED));
 	}
 	if (vup->c()->final()) {
 	    // Final width known, so make sure children recompute & check their sizes
@@ -287,7 +298,7 @@ private:
 	    nodep->expr1p()->iterateAndNext(*this,WidthVP(width,mwidth,FINAL).p());
 	    nodep->expr2p()->iterateAndNext(*this,WidthVP(width,mwidth,FINAL).p());
 	    // Error report and change sizes for suboperands of this node.
-	    widthCheckReduce(nodep,"Conditional Test",nodep->condp(),1,0);
+	    widthCheckReduce(nodep,"Conditional Test",nodep->condp());
 	    widthCheck(nodep,"Conditional True",nodep->expr1p(),width,mwidth);
 	    widthCheck(nodep,"Conditional False",nodep->expr2p(),width,mwidth);
 	}
@@ -321,7 +332,7 @@ private:
 	    }
 	}
 	if (vup->c()->final()) {
-	    if (!nodep->widthSized()) {
+	    if (!nodep->dtypep()->widthSized()) {
 		// See also error in V3Number
 		nodep->v3warn(WIDTHCONCAT,"Unsized numbers/parameters not allowed in concatenations.");
 	    }
@@ -345,7 +356,7 @@ private:
 				      AstNumeric::UNSIGNED);
 	}
 	if (vup->c()->final()) {
-	    if (!nodep->widthSized()) {
+	    if (!nodep->dtypep()->widthSized()) {
 		// See also error in V3Number
 		nodep->v3warn(WIDTHCONCAT,"Unsized numbers/parameters not allowed in replications.");
 	    }
@@ -436,15 +447,31 @@ private:
 		// See also warning in V3Const
 		// We need to check here, because the widthCheck may silently
 		// add another SEL which will lose the out-of-range check
-		nodep->v3error("Selection index out of range: "
- 			       <<nodep->msbConst()<<":"<<nodep->lsbConst()
-			       <<" outside "<<frommsb<<":"<<fromlsb);
-		UINFO(1,"    Related node: "<<nodep<<endl);
-		if (varrp) UINFO(1,"    Related var: "<<varrp->varp()<<endl);
-		if (varrp) UINFO(1,"    Related dtype: "<<varrp->varp()->dtypep()<<endl);
+		//
+		// We don't want to trigger an error here if we are just
+		// evaluating type sizes for a generate block condition. We
+		// should only trigger the error if the out-of-range access is
+		// actually generated.
+		if (m_doGenerate) {
+		    UINFO(5, "Selection index out of range inside generate."<<endl);
+		} else {
+		    nodep->v3error("Selection index out of range: "
+				   <<nodep->msbConst()<<":"<<nodep->lsbConst()
+				   <<" outside "<<frommsb<<":"<<fromlsb);
+		    UINFO(1,"    Related node: "<<nodep<<endl);
+		    if (varrp) UINFO(1,"    Related var: "<<varrp->varp()<<endl);
+		    if (varrp) UINFO(1,"    Related dtype: "<<varrp->varp()->dtypep()<<endl);
+		}
 	    }
 	    // iterate FINAL is two blocks above
-	    widthCheck(nodep,"Extract Range",nodep->lsbp(),selwidth,selwidth,true);
+	    //
+	    // If we have a width problem with GENERATE etc, this will reduce
+	    // it down and mask it, so we have no chance of finding a real
+	    // error in the future. So don't do this for them.
+	    if (!m_doGenerate) {
+		widthCheck(nodep,"Extract Range",nodep->lsbp(),selwidth,
+			   selwidth,true);
+	    }
 	}
     }
 
@@ -465,14 +492,12 @@ private:
 	    int fromlsb;
 	    AstNodeDType* ddtypep = varrp->varp()->dtypep()->dtypeDimensionp(dimension);
 	    if (AstArrayDType* adtypep = ddtypep->castArrayDType()) {
-		int outwidth = varrp->width();		// Width of variable
 		frommsb = adtypep->msb();
 		fromlsb = adtypep->lsb();
 		if (fromlsb>frommsb) {int t=frommsb; frommsb=fromlsb; fromlsb=t; }
 		// However, if the lsb<0 we may go negative, so need more bits!
 		if (fromlsb < 0) frommsb += -fromlsb;
-		nodep->numericFrom(adtypep);
-		nodep->width(outwidth,outwidth);		// Width out = width of array
+		nodep->dtypeFrom(adtypep->subDTypep());  // Need to strip off array reference
 	    }
 	    else {
 		nodep->v3fatalSrc("Array reference exceeds dimension of array");
@@ -530,9 +555,9 @@ private:
 	// the number's sign.  So we don't: nodep->dtypeChgSigned(nodep->num().isSigned());
 	if (vup && vup->c()->prelim()) {
 	    if (nodep->num().sized()) {
-		nodep->width(nodep->num().width(), nodep->num().width());
+		nodep->dtypeChgWidth(nodep->num().width(), nodep->num().width());
 	    } else {
-		nodep->width(nodep->num().width(), nodep->num().widthMin());
+		nodep->dtypeChgWidth(nodep->num().width(), nodep->num().widthMin());
 	    }
 	}
 	// We don't size the constant until we commit the widths, as need parameters
@@ -605,64 +630,94 @@ private:
     }
     virtual void visit(AstAttrOf* nodep, AstNUser*) {
 	nodep->fromp()->iterateAndNext(*this,WidthVP(ANYSIZE,0,BOTH).p());
-	nodep->numeric(AstNumeric::UNSIGNED);
-	nodep->width(32,1);	// Approximation, unsized 32
+	// Don't iterate children, don't want to lose VarRef.
+	if (nodep->attrType()==AstAttrType::EXPR_BITS) {
+	    if (!nodep->fromp() || !nodep->fromp()->widthMin()) nodep->v3fatalSrc("Unsized expression");
+	    V3Number num (nodep->fileline(), 32, nodep->fromp()->width());
+	    nodep->replaceWith(new AstConst(nodep->fileline(), num)); nodep->deleteTree(); nodep=NULL;
+	} else {  // Everything else resolved earlier
+	    nodep->dtypeSetLogicSized(32,1,AstNumeric::UNSIGNED);	// Approximation, unsized 32
+	    nodep->v3fatalSrc("Missing ATTR type case");
+	}
     }
     virtual void visit(AstText* nodep, AstNUser* vup) {
 	// Only used in CStmts which don't care....
     }
-    virtual void visit(AstArrayDType* nodep, AstNUser* vup) {
-	// Lower datatype determines the width
-	nodep->dtypep()->iterateAndNext(*this,vup);
-	// But also cleanup array size
-	nodep->arrayp()->iterateAndNext(*this,WidthVP(ANYSIZE,0,BOTH).p());
-	nodep->widthFrom(nodep->dtypep());
-	nodep->numericFrom(nodep->dtypep());
+
+    // DTYPES
+    virtual void visit(AstArrayDType* nodep, AstNUser*) {
+	if (nodep->didWidthAndSet()) return;  // This node is a dtype & not both PRELIMed+FINALed
+	if (nodep->childDTypep()) nodep->refDTypep(moveChildDTypeEdit(nodep));
+	// Iterate into subDTypep() to resolve that type and update pointer.
+	nodep->refDTypep(iterateEditDTypep(nodep, nodep->subDTypep()));
+	// Cleanup array size
+	nodep->rangep()->iterateAndNext(*this,WidthVP(ANYSIZE,0,BOTH).p());
+	nodep->dtypep(nodep);  // The array itself, not subDtype
+	nodep->widthFromSub(nodep->subDTypep());
 	UINFO(4,"dtWidthed "<<nodep<<endl);
     }
-    virtual void visit(AstBasicDType* nodep, AstNUser* vup) {
+    virtual void visit(AstBasicDType* nodep, AstNUser*) {
+	if (nodep->didWidthAndSet()) return;  // This node is a dtype & not both PRELIMed+FINALed
+	if (nodep->generic()) return;  // Already perfect
 	if (nodep->rangep()) {
 	    nodep->rangep()->iterateAndNext(*this,WidthVP(ANYSIZE,0,BOTH).p());
-	    nodep->width(nodep->rangep()->elementsConst(), nodep->rangep()->elementsConst());
+	    // Because this DType has a unique child range, we know it's not pointed at by
+	    // other nodes unless they are referencing this type.  Furthermore the width()
+	    // calculation would return identical values.  Therefore we can directly replace the width
+	    nodep->widthForce(nodep->rangep()->elementsConst(), nodep->rangep()->elementsConst());
 	}
 	// else width in node is correct; it was set based on keyword().width()
 	// at construction time.  Ditto signed, so "unsigned byte" etc works right.
+	nodep->cvtRangeConst();
+	// TODO: If BasicDType now looks like a generic type, we can convert to a real generic dtype
+	// Instead for now doing this in V3WidthCommit
 	UINFO(4,"dtWidthed "<<nodep<<endl);
     }
-    virtual void visit(AstConstDType* nodep, AstNUser* vup) {
-	nodep->iterateChildren(*this, vup);
-	nodep->widthFrom(nodep->dtypep());
+    virtual void visit(AstConstDType* nodep, AstNUser*) {
+	if (nodep->didWidthAndSet()) return;  // This node is a dtype & not both PRELIMed+FINALed
+	// Move any childDTypep to instead be in global AstTypeTable.
+	// This way if this node gets deleted and some other dtype points to it
+	// it won't become a dead pointer.  This doesn't change the object pointed to.
+	if (nodep->childDTypep()) nodep->refDTypep(moveChildDTypeEdit(nodep));
+	// Iterate into subDTypep() to resolve that type and update pointer.
+	nodep->refDTypep(iterateEditDTypep(nodep, nodep->subDTypep()));
+	nodep->iterateChildren(*this);
+	nodep->dtypep(nodep);  // Should already be set, but be clear it's not the subDType
+	nodep->widthFromSub(nodep->subDTypep());
 	UINFO(4,"dtWidthed "<<nodep<<endl);
     }
-    virtual void visit(AstRefDType* nodep, AstNUser* vup) {
-	nodep->iterateChildren(*this, vup);
-	if (nodep->defp()) nodep->defp()->iterate(*this,vup);
-	nodep->widthSignedFrom(nodep->dtypeSkipRefp());
+    virtual void visit(AstRefDType* nodep, AstNUser*) {
+	if (nodep->didWidthAndSet()) return;  // This node is a dtype & not both PRELIMed+FINALed
+	nodep->iterateChildren(*this);
+	if (nodep->subDTypep()) nodep->refDTypep(iterateEditDTypep(nodep, nodep->subDTypep()));
+	nodep->dtypeFrom(nodep->dtypeSkipRefp());
+	nodep->widthFromSub(nodep->subDTypep());
 	UINFO(4,"dtWidthed "<<nodep<<endl);
     }
-    virtual void visit(AstTypedef* nodep, AstNUser* vup) {
-	nodep->iterateChildren(*this, vup);
-	nodep->widthSignedFrom(nodep->dtypep()->skipRefp());
+    virtual void visit(AstTypedef* nodep, AstNUser*) {
+	if (nodep->didWidthAndSet()) return;  // This node is a dtype & not both PRELIMed+FINALed
+	if (nodep->childDTypep()) nodep->dtypep(moveChildDTypeEdit(nodep));
+	nodep->iterateChildren(*this);
+	nodep->dtypep(iterateEditDTypep(nodep, nodep->subDTypep()));
     }
     virtual void visit(AstCast* nodep, AstNUser* vup) {
+	if (nodep->childDTypep()) nodep->dtypep(moveChildDTypeEdit(nodep));
+	nodep->dtypep(iterateEditDTypep(nodep, nodep->dtypep()));
 	//if (debug()) nodep->dumpTree(cout,"  CastPre: ");
 	nodep->lhsp()->iterateAndNext(*this,WidthVP(ANYSIZE,0,BOTH).p());
-	nodep->dtypep()->iterateAndNext(*this,WidthVP(ANYSIZE,0,BOTH).p());
 	// When more general casts are supported, the cast elimination will be done later.
 	// For now, replace it ASAP, so widthing can propagate easily
 	// The cast may change signing, but we don't know the sign yet.  Make it so.
 	// Note we don't sign lhsp() that would make the algorithm O(n^2) if lots of casting.
-	V3Width::widthParamsEdit(nodep->dtypep()); // MAY CHANGE dtypep()
-	AstBasicDType* basicp = nodep->dtypep()->basicp();  if (!basicp) nodep->v3fatalSrc("Unimplemented: Casting non-simple data type");
-	nodep->widthSignedFrom(basicp);
+	AstBasicDType* basicp = nodep->dtypep()->basicp();
+	if (!basicp) nodep->v3fatalSrc("Unimplemented: Casting non-simple data type");
+	// When implement more complicated types need to convert childDTypep to dtypep() not as a child
 	if (!basicp->isDouble() && !nodep->lhsp()->isDouble()) {
 	    // Note widthCheck might modify nodep->lhsp()
 	    widthCheck(nodep,"Cast",nodep->lhsp(),nodep->width(),nodep->width(),true);
 	}
 	AstNode* newp = nodep->lhsp()->unlinkFrBack();
-	if (basicp->numeric() == newp->numeric()) {
-	    newp = newp; // Can just remove cast
-	} else if (basicp->isDouble() && !newp->isDouble()) {
+	if (basicp->isDouble() && !newp->isDouble()) {
 	    newp = new AstIToRD(nodep->fileline(), newp);
 	} else if (!basicp->isDouble() && newp->isDouble()) {
 	    if (basicp->isSigned()) {
@@ -671,10 +726,12 @@ private:
 		newp = new AstUnsigned(nodep->fileline(),
 				       new AstRToIS(nodep->fileline(), newp));
 	    }
-	} else if (basicp->isSigned()) {
+	} else if (basicp->isSigned() && !newp->isSigned()) {
 	    newp = new AstSigned(nodep->fileline(), newp);
-	} else {
+	} else if (!basicp->isSigned() && newp->isSigned()) {
 	    newp = new AstUnsigned(nodep->fileline(), newp);
+	} else {
+	    newp = newp; // Can just remove cast
 	}
 	nodep->replaceWith(newp);
 	pushDeletep(nodep); nodep=NULL;
@@ -691,17 +748,28 @@ private:
 	    nodep->v3error("Variable's initial value is circular: "<<nodep->prettyName());
 	    pushDeletep(nodep->valuep()->unlinkFrBack());
 	    nodep->valuep(new AstConst(nodep->fileline(), AstConst::LogicTrue()));
-	    nodep->widthFrom(nodep->valuep());
+	    nodep->dtypeFrom(nodep->valuep());
 	    nodep->didWidth(true);
 	    return;
 	}
 	nodep->doingWidth(true);
+	// Make sure dtype is sized
+	if (nodep->childDTypep()) nodep->dtypep(moveChildDTypeEdit(nodep));
+	nodep->dtypep(iterateEditDTypep(nodep, nodep->dtypep()));
+	if (!nodep->dtypep()) nodep->v3fatalSrc("No dtype determined for var");
+	if (nodep->isIO() && !(nodep->dtypeSkipRefp()->castBasicDType() ||
+			       nodep->dtypeSkipRefp()->castArrayDType())) {
+	    nodep->v3error("Unsupported: Inputs and outputs must be simple data types");
+	}
+	if (nodep->dtypeSkipRefp()->castConstDType()) {
+	    nodep->isConst(true);
+	}
 	// Parameters if implicit untyped inherit from what they are assigned to
 	AstBasicDType* bdtypep = nodep->dtypep()->castBasicDType();
+	bool didchk = false;
 	bool implicitParam = nodep->isParam() && bdtypep && bdtypep->implicit();
 	if (implicitParam) {
 	    int width=0;
-	    AstNumeric rs = AstNumeric::UNSIGNED;
 	    if (nodep->valuep()) {
 		nodep->valuep()->iterateAndNext(*this,WidthVP(width,0,PRELIM).p());
 		UINFO(9,"implicitParamPRELIMIV "<<nodep->valuep()<<endl);
@@ -710,49 +778,38 @@ private:
 		// This prevents width warnings at the location the parameter is substituted in
 		if (nodep->valuep()->isDouble()) {
 		    nodep->dtypeSetDouble(); bdtypep=NULL;
-		    nodep->dtypep()->dtypeSetDouble(); bdtypep=NULL;
 		    nodep->valuep()->iterateAndNext(*this,WidthVP(width,0,FINAL).p());
 		} else {
-		    nodep->valuep()->iterateAndNext(*this,WidthVP(width,0,FINAL).p());
-		    if (bdtypep->nosigned()) rs = nodep->valuep()->numeric();
-		    else rs = nodep->numeric();
-		    if (nodep->valuep()->widthSized()) {
+		    AstBasicDType* valueBdtypep = nodep->valuep()->dtypep()->basicp();
+		    bool issigned = false;
+		    if (bdtypep->isNosign()) {
+			if (valueBdtypep && valueBdtypep->isSigned()) issigned=true;
+		    } else issigned = bdtypep->isSigned();
+		    if (nodep->valuep()->dtypep()->widthSized()) {
 			width = nodep->valuep()->width();
 		    } else {
 			if (nodep->valuep()->width()>32) nodep->valuep()->v3warn(WIDTH,"Assigning >32 bit to unranged parameter (defaults to 32 bits)");
 			width = 32;
 		    }
+		    // Can't just inherit valuep()->dtypep() as mwidth might not equal width
+		    nodep->dtypeChgWidthSigned(width, nodep->valuep()->widthMin(),issigned);
+		    didchk = true;
+		    nodep->valuep()->iterateAndNext(*this,WidthVP(width,nodep->widthMin(),FINAL).p());
 		}
 		UINFO(9,"implicitParamFromIV "<<nodep->valuep()<<endl);
 		//UINFO below will print variable nodep
 	    } else {
-		// Or, if nothing assigned, they're 32 bits.
-		width=32;
-	    }
-	    if (!nodep->isDouble()) {
-		AstBasicDType* newp = new AstBasicDType(nodep->fileline(), VFlagLogicPacked(), width);
-		newp->implicit(true);
-		newp->numeric(rs);  // SIGNED or UNSIGNED
-		bdtypep->replaceWith(newp);
-		bdtypep->deleteTree(); bdtypep=NULL;
-		nodep->dtypep()->iterateAndNext(*this,WidthVP(ANYSIZE,0,BOTH).p());
+		// Or, if nothing assigned, they're integral
+		nodep->dtypeSetSigned32(); bdtypep=NULL;
 	    }
 	}
-	else { // non param or sized param
-	    nodep->dtypep()->iterateAndNext(*this,WidthVP(ANYSIZE,0,BOTH).p());
-	    if (nodep->valuep()) {
-		nodep->valuep()->iterateAndNext(*this,WidthVP(nodep->dtypep()->width(),0,BOTH).p());
-		//if (debug()) nodep->dumpTree(cout,"  final: ");
-	    }
+	else if (bdtypep && bdtypep->implicit()) {  // Implicits get converted to size 1
+	    nodep->dtypeSetLogicSized(1,1,bdtypep->numeric()); bdtypep=NULL;
 	}
-	// See above note about valuep()->...FINAL
-	nodep->widthSignedFrom(nodep->dtypep());
 	if (nodep->valuep()) {
-	    if (implicitParam && !nodep->isDouble()) {
-		nodep->width(nodep->width(), nodep->valuep()->widthMin());   // Needed as mwidth might not equal width
-	    }
-	    widthCheck(nodep,"Initial value",nodep->valuep(),
-		       nodep->width(),nodep->widthMin());
+	    //if (debug()) nodep->dumpTree(cout,"  final: ");
+	    if (!didchk) nodep->valuep()->iterateAndNext(*this,WidthVP(nodep->dtypep()->width(),0,BOTH).p());
+	    widthCheck(nodep,"Initial value",nodep->valuep(),nodep->width(),nodep->widthMin());
 	}
 	UINFO(4,"varWidthed "<<nodep<<endl);
 	//if (debug()) nodep->dumpTree(cout,"  InitOut: ");
@@ -760,28 +817,36 @@ private:
 	nodep->doingWidth(false);
     }
     virtual void visit(AstNodeVarRef* nodep, AstNUser* vup) {
+	if (nodep->didWidth()) return;
 	if (!nodep->varp()->didWidth()) {
 	    // Var hasn't been widthed, so make it so.
 	    nodep->varp()->iterate(*this);
 	}
 	//if (debug()>=9) { nodep->dumpTree(cout,"  VRin  "); nodep->varp()->dumpTree(cout,"   forvar "); }
 	// Note genvar's are also entered as integers
-	nodep->numericFrom(nodep->varp());
+	nodep->dtypeFrom(nodep->varp());
 	if (nodep->backp()->castNodeAssign() && nodep->lvalue()) {  // On LHS
-	    // Consider Integers on LHS to sized (else may inherit unsized.)
-	    nodep->width(nodep->varp()->width(), nodep->varp()->width());
-	} else {
-	    nodep->widthFrom(nodep->varp());
+	    if (!nodep->widthMin()) v3fatalSrc("LHS var should be size complete");
 	}
 	//if (debug()>=9) nodep->dumpTree(cout,"  VRout ");
+	if (nodep->lvalue() && nodep->varp()->isConst()
+	    && !m_paramsOnly
+	    && !m_initialp) {  // Too loose, but need to allow our generated first assignment
+	    //                 // Move this to a property of the AstInitial block
+	    nodep->v3error("Assigning to const variable: "<<nodep->prettyName());
+	}
+	nodep->didWidth(true);
     }
 
     virtual void visit(AstEnumDType* nodep, AstNUser* vup) {
+	if (nodep->didWidthAndSet()) return;  // This node is a dtype & not both PRELIMed+FINALed
 	UINFO(5,"  ENUMDTYPE "<<nodep<<endl);
-	nodep->dtypep()->iterateAndNext(*this,WidthVP(ANYSIZE,0,BOTH).p());
-	nodep->widthFrom(nodep->dtypep());
+	if (nodep->childDTypep()) nodep->refDTypep(moveChildDTypeEdit(nodep));
+	nodep->refDTypep(iterateEditDTypep(nodep, nodep->subDTypep()));
+	nodep->dtypep(nodep);
+	nodep->widthFromSub(nodep->subDTypep());
 	// Assign widths
-	nodep->itemsp()->iterateAndNext(*this,WidthVP(nodep->width(),nodep->widthMin(),BOTH).p());
+	nodep->itemsp()->iterateAndNext(*this,WidthVP(nodep->dtypep(),BOTH).p());
 	// Assign missing values
 	V3Number num (nodep->fileline(), nodep->width(), 0);
 	V3Number one (nodep->fileline(), nodep->width(), 1);
@@ -793,12 +858,23 @@ private:
 		if (!itemp->valuep()->castConst()) {
 		    itemp->valuep()->v3error("Enum value isn't a constant");
 		    itemp->valuep()->unlinkFrBack()->deleteTree();
+		    continue;
 		}
+		// TODO IEEE says assigning sized number that is not same size as enum is illegal
 	    }
-	    if (!itemp->valuep()) itemp->valuep(new AstConst(itemp->fileline(), num));
+	    if (!itemp->valuep()) {
+		if (num.isEqZero() && itemp != nodep->itemsp())
+		    itemp->v3error("Enum value wrapped around"); // IEEE says illegal
+		if (!nodep->dtypep()->basicp()
+		    && !nodep->dtypep()->basicp()->keyword().isIntNumeric()) {
+		    itemp->v3error("Enum names without values only allowed on numeric types");
+		    // as can't +1 to resolve them.
+		}
+		itemp->valuep(new AstConst(itemp->fileline(), num));
+	    }
 	    num.opAssign(itemp->valuep()->castConst()->num());
 	    // Look for duplicates
-	    if (inits.find(num) != inits.end()) {
+	    if (inits.find(num) != inits.end()) {  // IEEE says illegal
 		itemp->v3error("Overlapping enumeration value: "<<itemp->prettyName());
 		inits.find(num)->second->v3error("... Location of original declaration");
 	    } else {
@@ -809,16 +885,18 @@ private:
     }
     virtual void visit(AstEnumItem* nodep, AstNUser* vup) {
 	UINFO(5,"   ENUMITEM "<<nodep<<endl);
-	int width = vup->c()->width();
-	int mwidth = vup->c()->widthMin();
-	nodep->width(width, mwidth);
-	if (nodep->valuep()) {
-	    nodep->valuep()->iterateAndNext(*this,WidthVP(width,mwidth,BOTH).p());
+	AstNodeDType* vdtypep = vup->c()->dtypep();
+	nodep->dtypep(vdtypep);
+	if (nodep->valuep()) {  // else the value will be assigned sequentially
+	    int width = vdtypep->width();  // Always from parent type
+	    nodep->valuep()->iterateAndNext(*this,WidthVP(width,0,BOTH).p());
+	    int mwidth = nodep->valuep()->widthMin();  // Value determines minwidth
+	    nodep->dtypeChgWidth(width, mwidth);
 	    widthCheck(nodep,"Enum value",nodep->valuep(),width,mwidth);
 	}
     }
     virtual void visit(AstEnumItemRef* nodep, AstNUser* vup) {
-	if (nodep->itemp()->width()==0) {
+	if (!nodep->itemp()->didWidth()) {
 	    // We need to do the whole enum en-mass
 	    AstNode* enump = nodep->itemp();
 	    if (!enump) nodep->v3fatalSrc("EnumItemRef not linked");
@@ -828,16 +906,16 @@ private:
 	    if (!enump) nodep->v3fatalSrc("EnumItemRef can't deref back to an Enum");
 	    enump->iterate(*this,vup);
 	}
-	nodep->widthSignedFrom(nodep->itemp());
+	nodep->dtypeFrom(nodep->itemp());
     }
     virtual void visit(AstPslClocked* nodep, AstNUser*) {
 	nodep->propp()->iterateAndNext(*this,WidthVP(1,1,BOTH).p());
 	nodep->sensesp()->iterateAndNext(*this);
 	if (nodep->disablep()) {
 	    nodep->disablep()->iterateAndNext(*this,WidthVP(1,1,BOTH).p());
-	    widthCheckReduce(nodep,"Disable",nodep->disablep(),1,1); // it's like an if() condition.
+	    widthCheckReduce(nodep,"Disable",nodep->disablep()); // it's like an if() condition.
 	}
-	widthCheckReduce(nodep,"Property",nodep->propp(),1,1);	// it's like an if() condition.
+	widthCheckReduce(nodep,"Property",nodep->propp());	// it's like an if() condition.
 	nodep->dtypeSetLogicBool();
     }
 
@@ -883,7 +961,7 @@ private:
 	nodep->condp()->iterateAndNext(*this,WidthVP(1,1,BOTH).p());
 	if (!nodep->castGenFor()) nodep->bodysp()->iterateAndNext(*this);
 	nodep->incsp()->iterateAndNext(*this);
-	widthCheckReduce(nodep,"For Test Condition",nodep->condp(),1,1);	// it's like an if() condition.
+	widthCheckReduce(nodep,"For Test Condition",nodep->condp());	// it's like an if() condition.
     }
     virtual void visit(AstRepeat* nodep, AstNUser*) {
 	nodep->countp()->iterateAndNext(*this,WidthVP(ANYSIZE,0,BOTH).p());
@@ -895,7 +973,7 @@ private:
 	nodep->condp()->iterateAndNext(*this,WidthVP(1,1,BOTH).p());
 	nodep->bodysp()->iterateAndNext(*this);
 	nodep->incsp()->iterateAndNext(*this);
-	widthCheckReduce(nodep,"For Test Condition",nodep->condp(),1,1);	// it's like an if() condition.
+	widthCheckReduce(nodep,"For Test Condition",nodep->condp());	// it's like an if() condition.
     }
     virtual void visit(AstNodeIf* nodep, AstNUser*) {
 	// TOP LEVEL NODE
@@ -904,10 +982,9 @@ private:
 	    nodep->ifsp()->iterateAndNext(*this);
 	    nodep->elsesp()->iterateAndNext(*this);
 	}
-	nodep->condp()->iterateAndNext(*this,WidthVP(1,1,PRELIM).p());
+	nodep->condp()->iterateAndNext(*this,WidthVP(1,1,BOTH).p());
 	spliceCvtCmpD0(nodep->condp());
-	nodep->condp()->iterateAndNext(*this,WidthVP(1,1,FINAL).p());
-	widthCheckReduce(nodep,"If",nodep->condp(),1,1);	// it's like an if() condition.
+	widthCheckReduce(nodep,"If",nodep->condp());	// it's like an if() condition.
 	//if (debug()) nodep->dumpTree(cout,"  IfOut: ");
     }
     virtual void visit(AstNodeAssign* nodep, AstNUser*) {
@@ -915,7 +992,8 @@ private:
 	//if (debug()) nodep->dumpTree(cout,"  AssignPre: ");
 	nodep->lhsp()->iterateAndNext(*this,WidthVP(ANYSIZE,0,BOTH).p());
 	nodep->rhsp()->iterateAndNext(*this,WidthVP(ANYSIZE,0,PRELIM).p());
-	if (!nodep->lhsp()->widthSized()) nodep->v3fatalSrc("How can LHS be unsized?");
+	if (!nodep->lhsp()->dtypep()) nodep->v3fatalSrc("How can LHS be untyped?");
+	if (!nodep->lhsp()->dtypep()->widthSized()) nodep->v3fatalSrc("How can LHS be unsized?");
 	if (!nodep->lhsp()->isDouble() && nodep->rhsp()->isDouble()) {
 	    spliceCvtS(nodep->rhsp(), false);  // Round RHS
 	} else if (nodep->lhsp()->isDouble() && !nodep->rhsp()->isDouble()) {
@@ -926,8 +1004,8 @@ private:
 	    awidth = nodep->rhsp()->width();	// Parameters can propagate by unsized assignment
 	}
 	nodep->rhsp()->iterateAndNext(*this,WidthVP(awidth,awidth,FINAL).p());
-	nodep->numericFrom(nodep->lhsp());
-	nodep->width(awidth,awidth);  // We know the assign will truncate, so rather
+	nodep->dtypeFrom(nodep->lhsp());
+	nodep->dtypeChgWidth(awidth,awidth);  // We know the assign will truncate, so rather
 	// than using "width" and have the optimizer truncate the result, we do
 	// it using the normal width reduction checks.
 	//UINFO(0,"aw "<<awidth<<" w"<<nodep->rhsp()->width()<<" m"<<nodep->rhsp()->widthMin()<<endl);
@@ -1060,19 +1138,19 @@ private:
 	// TOP LEVEL NODE
 	nodep->propp()->iterateAndNext(*this,WidthVP(1,1,BOTH).p());
 	nodep->stmtsp()->iterateChildren(*this,WidthVP(ANYSIZE,0,BOTH).p());
-	widthCheckReduce(nodep,"Property",nodep->propp(),1,1);	// it's like an if() condition.
+	widthCheckReduce(nodep,"Property",nodep->propp());	// it's like an if() condition.
     }
     virtual void visit(AstPslAssert* nodep, AstNUser*) {
 	// TOP LEVEL NODE
 	nodep->propp()->iterateAndNext(*this,WidthVP(1,1,BOTH).p());
-	widthCheckReduce(nodep,"Property",nodep->propp(),1,1);	// it's like an if() condition.
+	widthCheckReduce(nodep,"Property",nodep->propp());	// it's like an if() condition.
     }
     virtual void visit(AstVAssert* nodep, AstNUser*) {
 	// TOP LEVEL NODE
 	nodep->propp()->iterateAndNext(*this,WidthVP(1,1,BOTH).p());
 	nodep->passsp()->iterateAndNext(*this);
 	nodep->failsp()->iterateAndNext(*this);
-	widthCheckReduce(nodep,"Property",nodep->propp(),1,1);	// it's like an if() condition.
+	widthCheckReduce(nodep,"Property",nodep->propp());	// it's like an if() condition.
     }
     virtual void visit(AstPin* nodep, AstNUser*) {
 	//if (debug()) nodep->dumpTree(cout,"-  PinPre: ");
@@ -1080,10 +1158,13 @@ private:
 	if (nodep->modVarp() && nodep->modVarp()->isGParam()) {
 	    // Widthing handled as special init() case
 	    nodep->iterateChildren(*this,WidthVP(ANYSIZE,0,BOTH).p());
-	} else if (!m_paramsOnly){
+	} else if (!m_paramsOnly) {
 	    if (nodep->modVarp()->width()==0) {
 		// Var hasn't been widthed, so make it so.
 		nodep->modVarp()->iterate(*this);
+	    }
+	    if (!nodep->exprp()) { // No-connect
+		return;
 	    }
 	    // Very much like like an assignment, but which side is LH/RHS
 	    // depends on pin being a in/output/inout.
@@ -1126,7 +1207,6 @@ private:
 		    awidth = expwidth;
 		}
 	    }
-	    nodep->width(awidth,awidth);
 	    nodep->exprp()->iterateAndNext(*this,WidthVP(awidth,awidth,FINAL).p());
 	    if (!m_cellRangep) {
 		widthCheckPin(nodep, nodep->exprp(), pinwidth, inputPin);
@@ -1168,8 +1248,7 @@ private:
 	if (nodep->fvarp()) {
 	    m_funcp = nodep->castFunc();
 	    if (!m_funcp) nodep->v3fatalSrc("FTask with function variable, but isn't a function");
-	    nodep->numericFrom(nodep->fvarp());  // Which will get it from fvarp()->dtypep()
-	    nodep->width(nodep->fvarp()->width(), nodep->fvarp()->width());
+	    nodep->dtypeFrom(nodep->fvarp());  // Which will get it from fvarp()->dtypep()
 	}
 	nodep->didWidth(true);
 	nodep->doingWidth(false);
@@ -1184,13 +1263,13 @@ private:
 	    if (nodep->lhsp()) {
 		// Function hasn't been widthed, so make it so.
 		nodep->iterateChildren(*this,WidthVP(ANYSIZE,0,BOTH).p());
-		nodep->widthSignedFrom(m_funcp->fvarp());
+		nodep->dtypeFrom(m_funcp->fvarp());
 	    }
 	}
     }
     virtual void visit(AstFuncRef* nodep, AstNUser* vup) {
 	visit(nodep->castNodeFTaskRef(), vup);
-	nodep->widthSignedFrom(nodep->taskp());
+	nodep->dtypeFrom(nodep->taskp());
 	//if (debug()) nodep->dumpTree(cout,"  FuncOut: ");
     }
     virtual void visit(AstNodeFTaskRef* nodep, AstNUser* vup) {
@@ -1267,6 +1346,11 @@ private:
 	}
 	nodep->didWidth(true);
     }
+    virtual void visit(AstInitial* nodep, AstNUser*) {
+	m_initialp = nodep;
+	nodep->iterateChildren(*this);
+	m_initialp = NULL;
+    }
     virtual void visit(AstNetlist* nodep, AstNUser*) {
 	// Iterate modules backwards, in bottom-up order.  That's faster
 	nodep->iterateChildrenBackwards(*this);
@@ -1341,7 +1425,7 @@ private:
 	}
 	nodep->dtypeSetLogicBool();
 	if (vup->c()->final()) {
-	    widthCheckReduce(nodep,"LHS",nodep->op1p(),1,1);
+	    widthCheckReduce(nodep,"LHS",nodep->op1p());
 	}
     }
     void visit_log_O1_LR1rus(AstNodeBiop* nodep, AstNUser* vup) {
@@ -1355,8 +1439,8 @@ private:
 	}
 	nodep->dtypeSetLogicBool();
 	if (vup->c()->final()) {
-	    widthCheckReduce(nodep,"LHS",nodep->lhsp(),1,1);
-	    widthCheckReduce(nodep,"RHS",nodep->rhsp(),1,1);
+	    widthCheckReduce(nodep,"LHS",nodep->lhsp());
+	    widthCheckReduce(nodep,"RHS",nodep->rhsp());
 	}
     }
 
@@ -1448,14 +1532,15 @@ private:
 		nodep = newp;  // Process new node instead
 	    }
 	} else {
+	    if (!nodep->dtypep()) nodep->dtypeFrom(nodep->lhsp());
 	    nodep->dtypeChgSigned(nodep->lhsp()->isSigned());
 	    // Note there aren't yet uniops that need version changes
 	    // So no need to call replaceWithUOrSVersion(nodep, nodep->isSigned())
 	}
 	int width  = max(vup->c()->width(),    nodep->lhsp()->width());
 	int ewidth = max(vup->c()->widthMin(), nodep->lhsp()->widthMin());
-	nodep->width(width,ewidth);
-	nodep->numericFrom(nodep->lhsp());
+	nodep->dtypeFrom(nodep->lhsp());
+	nodep->dtypeChgWidth(width,ewidth);
 	if (vup->c()->final()) {
 	    nodep->lhsp()->iterateAndNext(*this,WidthVP(width,ewidth,FINAL).p());
 	    widthCheck(nodep,"LHS",nodep->lhsp(),width,ewidth);
@@ -1494,12 +1579,13 @@ private:
 	if (vup->c()->prelim()) {
 	    nodep->lhsp()->iterateAndNext(*this,WidthVP(ANYSIZE,0,PRELIM).p());
 	    nodep->rhsp()->iterateAndNext(*this,WidthVP(ANYSIZE,0,BOTH).p());
+	    if (!nodep->dtypep()) nodep->dtypeFrom(nodep->lhsp());
 	    checkCvtUS(nodep->lhsp());
 	    checkCvtUS(nodep->rhsp());
 	}
 	int width  = max(vup->c()->width(),    nodep->lhsp()->width());
 	int ewidth = max(vup->c()->widthMin(), nodep->lhsp()->widthMin());
-	nodep->width(width,ewidth);
+	nodep->dtypeChgWidth(width,ewidth);
     }
     AstNodeBiop* shift_final(AstNodeBiop* nodep, AstNUser* vup)  {
 	// Nodep maybe edited
@@ -1537,8 +1623,8 @@ private:
 	}
 	int width  = max(vup->c()->width(),    max(nodep->lhsp()->width(),    nodep->rhsp()->width()));
 	int mwidth = max(vup->c()->widthMin(), max(nodep->lhsp()->widthMin(), nodep->rhsp()->widthMin()));
-	nodep->width(width,mwidth);
-	nodep->dtypeChgSigned(nodep->lhsp()->isSigned() && nodep->rhsp()->isSigned());
+	nodep->dtypeChgWidthSigned(width,mwidth,
+				   (nodep->lhsp()->isSigned() && nodep->rhsp()->isSigned()));
 	if (vup->c()->final()) {
 	    // Final call, so make sure children check their sizes
 	    nodep->lhsp()->iterateAndNext(*this,WidthVP(width,mwidth,FINAL).p());
@@ -1568,6 +1654,7 @@ private:
 	// If errors are off, we need to follow the spec; thus we really need to do the max()
 	// because the rhs could be larger, and we need to have proper editing to get the widths
 	// to be the same for our operations.
+	//if (debug()>=9) { UINFO(0,"-rus "<<vup->c()<<endl); nodep->dumpTree(cout,"-rusin-"); }
 	if (vup->c()->prelim()) {  // First stage evaluation
 	    // Determine expression widths only relying on what's in the subops
 	    nodep->lhsp()->iterateAndNext(*this,WidthVP(ANYSIZE,0,PRELIM).p());
@@ -1583,7 +1670,9 @@ private:
 	    if (AstNodeBiop* newp=replaceWithDVersion(nodep)) { nodep=NULL;
 		nodep = newp;  // Process new node instead
 	    }
+	    nodep->dtypeSetDouble();
 	} else {
+	    if (!nodep->dtypep()) nodep->dtypeFrom(nodep->lhsp());
 	    nodep->dtypeChgSigned(nodep->lhsp()->isSigned() && nodep->rhsp()->isSigned());
 	    if (AstNodeBiop* newp=replaceWithUOrSVersion(nodep, nodep->isSigned())) { nodep=NULL;
 		nodep = newp;  // Process new node instead
@@ -1591,7 +1680,7 @@ private:
 	}
 	int width  = max(vup->c()->width(),    max(nodep->lhsp()->width(),    nodep->rhsp()->width()));
 	int mwidth = max(vup->c()->widthMin(), max(nodep->lhsp()->widthMin(), nodep->rhsp()->widthMin()));
-	nodep->width(width,mwidth);
+	nodep->dtypeChgWidth(width,mwidth);
 	if (vup->c()->final()) {
 	    // Final call, so make sure children check their sizes
 	    nodep->lhsp()->iterateAndNext(*this,WidthVP(width,mwidth,FINAL).p());
@@ -1609,6 +1698,7 @@ private:
 	    widthCheck(nodep,"LHS",nodep->lhsp(),width,mwidth,lhsOk);
 	    widthCheck(nodep,"RHS",nodep->rhsp(),width,mwidth,rhsOk);
 	}
+	//if (debug()>=9) nodep->dumpTree(cout,"-rusou-");
     }
     void visit_math_Or_LRr(AstNodeBiop* nodep, AstNUser* vup) {
 	// CALLER: AddD, MulD, ...
@@ -1633,11 +1723,12 @@ private:
     // LOWER LEVEL WIDTH METHODS  (none iterate)
 
     bool widthBad (AstNode* nodep, int expWidth, int expWidthMin) {
+	if (!nodep->dtypep()) nodep->v3fatalSrc("Under node "<<nodep->prettyTypeName()<<" has no dtype?? Missing Visitor func?");
 	if (nodep->width()==0) nodep->v3fatalSrc("Under node "<<nodep->prettyTypeName()<<" has no expected width?? Missing Visitor func?");
 	if (expWidth==0) nodep->v3fatalSrc("Node "<<nodep->prettyTypeName()<<" has no expected width?? Missing Visitor func?");
 	if (expWidthMin==0) expWidthMin = expWidth;
-	if (nodep->widthSized()  && nodep->width() != expWidthMin) return true;
-	if (!nodep->widthSized() && nodep->widthMin() > expWidthMin) return true;
+	if (nodep->dtypep()->widthSized()  && nodep->width() != expWidthMin) return true;
+	if (!nodep->dtypep()->widthSized() && nodep->widthMin() > expWidthMin) return true;
 	return false;
     }
 
@@ -1675,7 +1766,7 @@ private:
 	    linker.relink(newp);
 	    nodep=newp;
 	}
-	nodep->width(expWidth,expWidth);
+	nodep->dtypeChgWidth(expWidth,expWidth);
 	UINFO(4,"             _new: "<<nodep<<endl);
     }
 
@@ -1700,7 +1791,7 @@ private:
 	    linker.relink(newp);
 	    nodep=newp;
 	}
-	nodep->width(expWidth,expWidth);
+	nodep->dtypeChgWidth(expWidth,expWidth);
 	UINFO(4,"             _new: "<<nodep<<endl);
     }
 
@@ -1762,10 +1853,12 @@ private:
     }
 
     void widthCheckReduce (AstNode* nodep, const char* side,
-			   AstNode* underp, int expWidth, int expWidthMin,
-			   bool ignoreWarn=false) {
+			   AstNode* underp) {
+	// Underp is used in a boolean context, reduce a multibit number to one bit
 	// Before calling this, iterate into underp with FINAL state, so numbers get resized appropriately
-	if (expWidthMin==0) expWidthMin = expWidth;
+	bool ignoreWarn = false; // Not used
+	int expWidth = 1;
+	int expWidthMin = 1;
 	if (expWidth!=1) nodep->v3fatalSrc("Only for binary functions");
 	bool bad = widthBad(underp,expWidth,expWidthMin);
 	if (bad) {
@@ -1856,6 +1949,7 @@ private:
 	if (signedFlavorNeeded == nodep->signedFlavor()) {
 	    return NULL;
 	}
+	if (!nodep->dtypep()) nodep->dtypeFrom(nodep->lhsp());
 	// To simplify callers, some node types don't need to change
 	switch (nodep->type()) {
 	case AstType::atEQ:	nodep->dtypeChgSigned(signedFlavorNeeded); return NULL;
@@ -1894,7 +1988,7 @@ private:
 	}
 	UINFO(6,"   ReplaceWithUOrSVersion: "<<nodep<<" w/ "<<newp<<endl);
 	nodep->replaceWith(newp);
-	newp->widthSignedFrom(nodep);
+	newp->dtypeFrom(nodep);
 	pushDeletep(nodep); nodep=NULL;
 	return newp;
     }
@@ -1908,6 +2002,7 @@ private:
 	AstNode* lhsp = nodep->lhsp()->unlinkFrBack();
 	AstNode* rhsp = nodep->rhsp()->unlinkFrBack();
 	AstNodeBiop* newp = NULL;
+	// No width change on output;...		// All below have bool or double outputs
 	switch (nodep->type()) {
 	case AstType::atADD:  				newp = new AstAddD	(fl,lhsp,rhsp); break;
 	case AstType::atSUB:  				newp = new AstSubD	(fl,lhsp,rhsp); break;
@@ -1925,7 +2020,7 @@ private:
 	}
 	UINFO(6,"   ReplaceWithDVersion: "<<nodep<<" w/ "<<newp<<endl);
 	nodep->replaceWith(newp);
-	newp->widthSignedFrom(nodep);
+	// No width change; the default created type (bool or double) is correct
 	pushDeletep(nodep); nodep=NULL;
 	return newp;
     }
@@ -1946,9 +2041,37 @@ private:
 	}
 	UINFO(6,"   ReplaceWithDVersion: "<<nodep<<" w/ "<<newp<<endl);
 	nodep->replaceWith(newp);
-	newp->widthSignedFrom(nodep);
+	newp->dtypeFrom(nodep);
 	pushDeletep(nodep); nodep=NULL;
 	return newp;
+    }
+
+    //----------------------------------------------------------------------
+    // METHODS - data types
+
+    AstNodeDType* moveChildDTypeEdit(AstNode* nodep) {
+	// DTypes at parse time get added as a childDType to some node types such as AstVars.
+	// We move them to global scope, so removing/changing a variable won't lose the dtype.
+	AstNodeDType* dtnodep = nodep->getChildDTypep();
+	if (!dtnodep) nodep->v3fatalSrc("Caller should check for NULL before calling moveChild");
+	UINFO(9,"moveChildDTypeEdit  "<<dtnodep<<endl);
+	dtnodep->unlinkFrBack();  // Make non-child
+	v3Global.rootp()->typeTablep()->addTypesp(dtnodep);
+	return dtnodep;
+    }
+    AstNodeDType* iterateEditDTypep(AstNode* parentp, AstNodeDType* nodep) {
+	// Iterate into a data type to resolve that type. This process
+	// may eventually create a new data type, but not today
+	// it may make a new datatype, need subChildDType() to point to it;
+	// maybe we have user5p indicate a "replace me with" pointer.
+	// Need to be careful with "implicit" types though.
+	//
+	// Alternative is to have WidthVP return information.
+	// or have a call outside of normal visitor land.
+	// or have a m_return type (but need to return if width called multiple times)
+	if (!nodep) parentp->v3fatalSrc("Null dtype when widthing dtype");
+	nodep->iterate(*this);
+	return nodep;
     }
 
     //----------------------------------------------------------------------
@@ -1961,11 +2084,15 @@ private:
 
 public:
     // CONSTUCTORS
-    WidthVisitor(bool paramsOnly) {
+    WidthVisitor(bool paramsOnly,   // [in] TRUE if we are considering parameters only.
+	         bool doGenerate) { // [in] TRUE if we are inside a generate statement and
+	//			    // don't wish to trigger errors
 	m_paramsOnly = paramsOnly;
 	m_cellRangep = NULL;
 	m_casep = NULL;
 	m_funcp = NULL;
+	m_initialp = NULL;
+	m_doGenerate = doGenerate;
     }
     AstNode* mainAcceptEdit(AstNode* nodep) {
 	return nodep->acceptSubtreeReturnEdits(*this, WidthVP(ANYSIZE,0,BOTH).p());
@@ -1979,16 +2106,38 @@ public:
 void V3Width::width(AstNetlist* nodep) {
     UINFO(2,__FUNCTION__<<": "<<endl);
     // We should do it in bottom-up module order, but it works in any order.
-    WidthVisitor visitor (false);
+    WidthVisitor visitor (false, false);
     (void)visitor.mainAcceptEdit(nodep);
     WidthRemoveVisitor rvisitor;
     (void)rvisitor.mainAcceptEdit(nodep);
 }
 
-AstNode* V3Width::widthParamsEdit(AstNode* nodep) {
+//! Single node parameter propagation
+//! Smaller step... Only do a single node for parameter propagation
+AstNode* V3Width::widthParamsEdit (AstNode* nodep) {
     UINFO(4,__FUNCTION__<<": "<<endl);
     // We should do it in bottom-up module order, but it works in any order.
-    WidthVisitor visitor (true);
+    WidthVisitor visitor (true, false);
+    nodep = visitor.mainAcceptEdit(nodep);
+    WidthRemoveVisitor rvisitor;
+    nodep = rvisitor.mainAcceptEdit(nodep);
+    return nodep;
+}
+
+//! Single node parameter propagation for generate blocks.
+//! Smaller step... Only do a single node for parameter propagation
+//! If we are inside a generated "if", "case" or "for", we don't want to
+//! trigger warnings when we deal with the width. It is possible that
+//! these are spurious, existing within sub-expressions that will not
+//! actually be generated. Since such occurrences, must be constant, in
+//! order to be someting a generate block can depend on, we can wait until
+//! later to do the width check.
+//! @return  Pointer to the edited node.
+AstNode* V3Width::widthGenerateParamsEdit(
+    AstNode* nodep) { //!< [in] AST whose parameters widths are to be analysed.
+    UINFO(4,__FUNCTION__<<": "<<endl);
+    // We should do it in bottom-up module order, but it works in any order.
+    WidthVisitor visitor (true, true);
     nodep = visitor.mainAcceptEdit(nodep);
     WidthRemoveVisitor rvisitor;
     nodep = rvisitor.mainAcceptEdit(nodep);

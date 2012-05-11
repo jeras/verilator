@@ -207,9 +207,22 @@ private:
 	if (nodep->broken()) {
 	    nodep->v3fatalSrc("Broken link in node (or something without maybePointedTo)");
 	}
+	if (nodep->dtypep()) {
+	    if (!nodep->dtypep()->brokeExists()) { nodep->v3fatalSrc("Broken link in node->dtypep() to "<<(void*)nodep->dtypep()); }
+	    else if (!nodep->dtypep()->castNodeDType()) { nodep->v3fatalSrc("Non-dtype link in node->dtypep() to "<<(void*)nodep->dtypep()); }
+	}
 	if (v3Global.assertDTypesResolved()) {
-	    if (!nodep->width() && nodep->castNodeMath()) {
-		nodep->v3fatalSrc("Math node has no assigned width");
+	    if (nodep->hasDType()) {
+		if (!nodep->dtypep()) nodep->v3fatalSrc("No dtype on node with hasDType(): "<<nodep->prettyTypeName());
+	    } else {
+		if (nodep->dtypep()) nodep->v3fatalSrc("DType on node without hasDType(): "<<nodep->prettyTypeName());
+	    }
+	    if (nodep->getChildDTypep()) nodep->v3fatalSrc("childDTypep() non-null on node after should have removed");
+	    if (AstNodeDType* dnodep = nodep->castNodeDType()) {
+		if (dnodep->width() != dnodep->widthMin()
+		    && v3Global.assertWidthsMatch()) {
+		    dnodep->v3fatalSrc("Width != WidthMin");
+		}
 	    }
 	}
 	if (v3Global.assertWidthsMatch()) {
@@ -233,10 +246,18 @@ public:
 
 void V3Broken::brokenAll(AstNetlist* nodep) {
     //UINFO(9,__FUNCTION__<<": "<<endl);
-    BrokenTable::prepForTree();
-    BrokenMarkVisitor mvisitor (nodep);
-    BrokenCheckVisitor cvisitor (nodep);
-    BrokenTable::doneWithTree();
+    static bool inBroken = false;
+    if (inBroken) {
+	// A error called by broken can recurse back into broken; avoid this
+	UINFO(1,"Broken called under broken, skipping recursion.\n");
+    } else {
+	inBroken = true;
+	BrokenTable::prepForTree();
+	BrokenMarkVisitor mvisitor (nodep);
+	BrokenCheckVisitor cvisitor (nodep);
+	BrokenTable::doneWithTree();
+	inBroken = false;
+    }
 }
 
 void V3Broken::addNewed(AstNode* nodep) {

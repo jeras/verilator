@@ -487,7 +487,7 @@ public:
 	    visit(nodep->castNodeUniop(), vup);
 	} else {
 	    putbs("VL_REDXOR_");
-	    puts(cvtToStr(nodep->lhsp()->widthPow2()));
+	    puts(cvtToStr(nodep->lhsp()->dtypep()->widthPow2()));
 	    puts("(");
 	    nodep->lhsp()->iterateAndNext(*this);
 	    puts(")");
@@ -889,7 +889,7 @@ void EmitCStmts::emitVarDecl(AstVar* nodep, const string& prefixIfImp) {
 	    puts(nodep->name());
 	    if (isArray) {
 		for (AstArrayDType* arrayp=nodep->dtypeSkipRefp()->castArrayDType(); arrayp;
-		     arrayp = arrayp->dtypeSkipRefp()->castArrayDType()) {
+		     arrayp = arrayp->subDTypep()->skipRefp()->castArrayDType()) {
 		    puts("["+cvtToStr(arrayp->elementsConst())+"]");
 		}
 	    }
@@ -910,7 +910,7 @@ void EmitCStmts::emitVarDecl(AstVar* nodep, const string& prefixIfImp) {
 		if (nodep->isWide()) puts("W");
 		puts("("+nodep->name());
 		for (AstArrayDType* arrayp=nodep->dtypeSkipRefp()->castArrayDType(); arrayp;
-		     arrayp = arrayp->dtypeSkipRefp()->castArrayDType()) {
+		     arrayp = arrayp->subDTypep()->skipRefp()->castArrayDType()) {
 		    puts("["+cvtToStr(arrayp->elementsConst())+"]");
 		}
 		puts(","+cvtToStr(basicp->msb())+","+cvtToStr(basicp->lsb()));
@@ -932,7 +932,7 @@ void EmitCStmts::emitVarDecl(AstVar* nodep, const string& prefixIfImp) {
 	puts(nodep->vlArgType(true,false));
 	// This isn't very robust and may need cleanup for other data types
 	for (AstArrayDType* arrayp=nodep->dtypeSkipRefp()->castArrayDType(); arrayp;
-	     arrayp = arrayp->dtypeSkipRefp()->castArrayDType()) {
+	     arrayp = arrayp->subDTypep()->skipRefp()->castArrayDType()) {
 	    puts("["+cvtToStr(arrayp->elementsConst())+"]");
 	}
 	puts(";\n");
@@ -958,7 +958,7 @@ void EmitCStmts::emitVarDecl(AstVar* nodep, const string& prefixIfImp) {
 	puts(nodep->name());
 	// This isn't very robust and may need cleanup for other data types
 	for (AstArrayDType* arrayp=nodep->dtypeSkipRefp()->castArrayDType(); arrayp;
-	     arrayp = arrayp->dtypeSkipRefp()->castArrayDType()) {
+	     arrayp = arrayp->subDTypep()->skipRefp()->castArrayDType()) {
 	    puts("["+cvtToStr(arrayp->elementsConst())+"]");
 	}
 	puts(","+cvtToStr(basicp->msb())+","+cvtToStr(basicp->lsb()));
@@ -1192,11 +1192,11 @@ void EmitCStmts::displayArg(AstNode* dispp, AstNode** elistp, bool isScan,
     AstNode* argp = *elistp;
     if (!argp) {
 	// expectDisplay() checks this first, so internal error if found here
-	dispp->v3error("Internal: Missing arguments for $display format");
+	dispp->v3error("Internal: Missing arguments for $display-like format");
 	return;
     }
     if (argp->widthMin() > VL_VALUE_STRING_MAX_WIDTH) {
-	dispp->v3error("Exceeded limit of "+cvtToStr(VL_VALUE_STRING_MAX_WIDTH)+" bits for any display arguments");
+	dispp->v3error("Exceeded limit of "+cvtToStr(VL_VALUE_STRING_MAX_WIDTH)+" bits for any $display-like arguments");
     }
     if (argp && argp->isWide()
 	&& (fmtLetter=='d'||fmtLetter=='u')) {
@@ -1287,17 +1287,17 @@ void EmitCStmts::displayNode(AstNode* nodep, AstScopeName* scopenamep,
 	    case 'z':
 	    case 'l':
 	    case 'v':
-		nodep->v3error("Unsupported: $display format code: %"<<pos[0]);
+		nodep->v3error("Unsupported: $display-like format code: %"<<pos[0]);
 		break;
 	    default:
-		nodep->v3error("Unknown $display format code: %"<<pos[0]);
+		nodep->v3error("Unknown $display-like format code: %"<<pos[0]);
 		break;
 	    }
 	}
     }
     if (elistp != NULL) {
 	// expectFormat also checks this, and should have found it first, so internal
-	elistp->v3error("Internal: Extra arguments for $display format");
+	elistp->v3error("Internal: Extra arguments for $display-like format");
     }
     displayEmit(nodep, isScan);
 }
@@ -1341,7 +1341,7 @@ void EmitCImp::emitVarResets(AstNodeModule* modp) {
 		int vects = 0;
 		// This isn't very robust and may need cleanup for other data types
 		for (AstArrayDType* arrayp=varp->dtypeSkipRefp()->castArrayDType(); arrayp;
-		     arrayp = arrayp->dtypeSkipRefp()->castArrayDType()) {
+		     arrayp = arrayp->subDTypep()->skipRefp()->castArrayDType()) {
 		    int vecnum = vects++;
 		    if (arrayp->msb() < arrayp->lsb()) varp->v3fatalSrc("Should have swapped msb & lsb earlier.");
 		    string ivar = string("__Vi")+cvtToStr(vecnum);
@@ -1517,7 +1517,7 @@ void EmitCImp::emitSensitives() {
 		    int vects = 0;
 		    // This isn't very robust and may need cleanup for other data types
 		    for (AstArrayDType* arrayp=varp->dtypeSkipRefp()->castArrayDType(); arrayp;
-			 arrayp = arrayp->dtypeSkipRefp()->castArrayDType()) {
+			 arrayp = arrayp->subDTypep()->skipRefp()->castArrayDType()) {
 			int vecnum = vects++;
 			if (arrayp->msb() < arrayp->lsb()) varp->v3fatalSrc("Should have swapped msb & lsb earlier.");
 			string ivar = string("__Vi")+cvtToStr(vecnum);

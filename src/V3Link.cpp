@@ -173,7 +173,7 @@ private:
 	    foundp = nodep;
 	} else if (nodep==foundp) {  // Already inserted.
 	    // Good.
-	} else if ((nodep->castBegin() || foundp->castBegin())
+	} else if ((nodep->castBegin() && foundp->castBegin())
 		   && m_inGenerate) {
 	    // Begin: ... blocks often replicate under genif/genfor, so simply suppress duplicate checks
 	    // See t_gen_forif.v for an example.
@@ -215,18 +215,17 @@ private:
     }
 
     // VISITs
-    virtual void visit(AstNetlist* nodep, AstNUser*) {
+    virtual void visit(AstNetlist* nodep, AstNUser* vup) {
 	// Top scope
 	m_curVarsp = symsFindNew(nodep, NULL);
-	// And recurse...
-	// Recurse...
+	// Recurse..., backward as must do packages before using packages
 	m_idState = ID_FIND;
-	nodep->iterateChildren(*this);
+	nodep->iterateChildrenBackwards(*this);
 	if (debug()==9) m_curVarsp->dump(cout,"-curvars: ",true/*user4p_is_table*/);
 	m_idState = ID_PARAM;
-	nodep->iterateChildren(*this);
+	nodep->iterateChildrenBackwards(*this);
 	m_idState = ID_RESOLVE;
-	nodep->iterateChildren(*this);
+	nodep->iterateChildrenBackwards(*this);
 	nodep->checkTree();
     }
 
@@ -314,6 +313,15 @@ private:
 			|| (findvarp->isSignal() && nodep->isIO())) {
 			findvarp->combineType(nodep);
 			nodep->fileline()->modifyStateInherit(nodep->fileline());
+			AstBasicDType* bdtypep = findvarp->childDTypep()->castBasicDType();
+			if (bdtypep && bdtypep->implicit()) {
+			    // Then have "input foo" and "real foo" so the dtype comes from the other side.
+			    AstNodeDType* newdtypep = nodep->subDTypep();
+			    if (!newdtypep || !nodep->childDTypep()) findvarp->v3fatalSrc("No child type?");
+			    bdtypep->unlinkFrBack()->deleteTree();
+			    newdtypep->unlinkFrBack();
+			    findvarp->childDTypep(newdtypep);
+			}
 			nodep->unlinkFrBack()->deleteTree(); nodep=NULL;
 		    } else {
 			nodep->v3error("Duplicate declaration of signal: "<<nodep->prettyName());
@@ -434,7 +442,6 @@ private:
 		else dtypep = new AstBasicDType(nodep->fileline(), AstBasicDTypeKwd::LOGIC);
 		AstVar* newvarp = new AstVar(nodep->fileline(), AstVarType::OUTPUT, nodep->name(),
 					     VFlagChildDType(), dtypep);  // Not dtype resolved yet
-		if (nodep->isSigned()) newvarp->numeric(AstNumeric::SIGNED);
 		newvarp->funcReturn(true);
 		newvarp->trace(false);  // Not user visible
 		newvarp->attrIsolateAssign(nodep->attrIsolateAssign());
@@ -552,7 +559,7 @@ private:
 		defp = m_curVarsp->findIdUpward(nodep->name())->castTypedef();
 	    }
 	    if (!defp) { nodep->v3error("Can't find typedef: "<<nodep->prettyName()); }
-	    nodep->defp(defp->dtypep());
+	    nodep->refDTypep(defp->subDTypep());
 	    nodep->packagep(packageFor(defp));
 	}
 	nodep->iterateChildren(*this);
@@ -635,7 +642,7 @@ private:
 
     virtual void visit(AstPin* nodep, AstNUser*) {
 	// Pin: Link to submodule's port
-	// ONLY CALLED by AstCell during ID_RESOLVE and ID_PARAM state
+	// ONLY CALLED by visit(AstCell) during ID_RESOLVE and ID_PARAM state
 	if (m_idState==ID_RESOLVE && !nodep->modVarp()) {
 	    if (!m_cellVarsp) nodep->v3fatalSrc("Pin not under cell?\n");
 	    AstVar* refp = m_cellVarsp->findIdFlat(nodep->name())->castVar();
@@ -656,13 +663,6 @@ private:
 		} else {
 		    refp->user5p(nodep);
 		}
-	    }
-	    if (!nodep->exprp()) {
-		// It's an empty pin connection, done with it.
-		// (We used to not create pins for these, but we'd miss
-		// warns.  Perhaps they should live even further...)
-		pushDeletep(nodep->unlinkFrBack()); nodep=NULL;
-		return;
 	    }
 	    nodep->iterateChildren(*this);
 	}

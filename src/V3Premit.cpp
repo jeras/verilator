@@ -197,7 +197,7 @@ private:
     }
     void visitShift (AstNodeBiop* nodep) {
 	// Shifts of > 32/64 bits in C++ will wrap-around and generate non-0s
-	if (!nodep->user2Inc()) {
+	if (!nodep->user2SetOnce()) {
 	    UINFO(4,"  ShiftFix  "<<nodep<<endl);
 	    if (nodep->widthMin()<=64  // Else we'll use large operators which work right
 		// C operator's width must be < maximum shift which is based on Verilog width
@@ -220,10 +220,11 @@ private:
 		    V3Number zeronum  (nodep->fileline(), nodep->width(), 0);
 		    constzerop = new AstConst(nodep->fileline(), zeronum);
 		}
-		constzerop->widthFrom (nodep);  // unsigned
-		V3Number widthnum (nodep->fileline(), nodep->rhsp()->widthMin(), nodep->width()-1);
+		constzerop->dtypeFrom (nodep);  // unsigned
+
+		V3Number widthnum (nodep->fileline(), nodep->rhsp()->widthMin(), m1value);
 		AstNode* constwidthp = new AstConst(nodep->fileline(), widthnum);
-		constwidthp->widthFrom (nodep->rhsp());  // unsigned
+		constwidthp->dtypeFrom (nodep->rhsp());  // unsigned
 		AstCond* newp =
 		    new AstCond (nodep->fileline(),
 				 new AstLte (nodep->fileline(),

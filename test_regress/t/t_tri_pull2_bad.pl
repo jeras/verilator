@@ -7,15 +7,13 @@ if (!$::Driver) { use FindBin; exec("$FindBin::Bin/bootstrap.pl", @ARGV, $0); di
 # Lesser General Public License Version 3 or the Perl Artistic License
 # Version 2.0.
 
-$Self->{vlt} and $Self->unsupported("Verilator unsupported, tri");
-
 compile (
 	 fails=>$Self->{v3},
 	 expect=>
-'%Error: t/t_tri_bad_pull2.v:19: Unsupported: Conflicting pull directions.
-%Error: t/t_tri_bad_pull2.v:9: ... Location of conflicing pull.
+'%Error: t/t_tri_pull2_bad.v:\d+: Unsupported: Conflicting pull directions.
+%Error: t/t_tri_pull2_bad.v:\d+: ... Location of conflicing pull.
 %Error: Exiting due to',
-	 ) if 
+    );
 
 ok(1);
 1;

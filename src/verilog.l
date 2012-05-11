@@ -43,6 +43,7 @@ extern void yyerrorf(const char* format, ...);
 //======================================================================
 
 #define NEXTLINE() {PARSEP->linenoInc();}
+#define LINECHECK()  { const char* cp=yytext; for (int n=yyleng; n; --n) if (cp[n]=='\n') NEXTLINE(); }
 #define CRELINE() (PARSEP->copyOrSameFileLine())
 
 #define FL { yylval.fl = CRELINE(); }
@@ -296,6 +297,8 @@ word	[a-zA-Z0-9_]+
   "tranif0"		{ FL; return yTRANIF0; }
   "tranif1"		{ FL; return yTRANIF1; }
   "tri"			{ FL; return yTRI; }
+  "tri0"		{ FL; return yTRI0; }
+  "tri1"		{ FL; return yTRI1; }
   "vectored"		{ FL; return yVECTORED; }
   "while"		{ FL; return yWHILE; }
   "wire"		{ FL; return yWIRE; }
@@ -333,8 +336,6 @@ word	[a-zA-Z0-9_]+
   "triand"		{ yyerrorf("Unsupported: Verilog 1995 reserved word not implemented: %s",yytext); }
   "trior"		{ yyerrorf("Unsupported: Verilog 1995 reserved word not implemented: %s",yytext); }
   "trireg"		{ yyerrorf("Unsupported: Verilog 1995 reserved word not implemented: %s",yytext); }
-  "tri0"		{ yyerrorf("Unsupported: Verilog 1995 reserved word not implemented: %s",yytext); }
-  "tri1"		{ yyerrorf("Unsupported: Verilog 1995 reserved word not implemented: %s",yytext); }
   "wait"		{ yyerrorf("Unsupported: Verilog 1995 reserved word not implemented: %s",yytext); }
   "wand"		{ yyerrorf("Unsupported: Verilog 1995 reserved word not implemented: %s",yytext); }
   "weak0"		{ yyerrorf("Unsupported: Verilog 1995 reserved word not implemented: %s",yytext); }
@@ -894,8 +895,8 @@ word	[a-zA-Z0-9_]+
 			}
   \" 			{ yy_push_state(STRING); yymore(); }
 
-  [0-9]*?['']s?[bcodhBCODH][ \t]*[A-Fa-f0-9xXzZ_?]*	{
-			  FL; yylval.nump = PARSEP->newNumber(yylval.fl,(char*)yytext);
+  [0-9]*?['']s?[bcodhBCODH][ \t\n]*[A-Fa-f0-9xXzZ_?]*	{
+			  FL; LINECHECK(); yylval.nump = PARSEP->newNumber(yylval.fl,(char*)yytext);
                           return yaINTNUM;
 			}
   [0-9]*?['']s?[01xXzZ]	{	/* SystemVerilog */
@@ -903,16 +904,16 @@ word	[a-zA-Z0-9_]+
                           return yaINTNUM;
 			}
   /* Note below is constructed to not match the ' that begins a '(  or '{ */
-  [0-9][_0-9]*[ \t]*['']s?[bcodhBCODH]?[ \t]*[A-Fa-f0-9xXzZ_?]+	{
-			  FL; yylval.nump = PARSEP->newNumber(yylval.fl,(char*)yytext);
+  [0-9][_0-9]*[ \t\n]*['']s?[bcodhBCODH]?[ \t]*[A-Fa-f0-9xXzZ_?]+	{
+			  FL; LINECHECK(); yylval.nump = PARSEP->newNumber(yylval.fl,(char*)yytext);
                           return yaINTNUM;
 			}
-  [0-9][_0-9]*[ \t]*['']s?[bcodhBCODH]	{
-			  FL; yylval.nump = PARSEP->newNumber(yylval.fl,(char*)yytext);
+  [0-9][_0-9]*[ \t\n]*['']s?[bcodhBCODH]	{
+			  FL; LINECHECK(); yylval.nump = PARSEP->newNumber(yylval.fl,(char*)yytext);
                           return yaINTNUM;
 			}
-  [0-9][_0-9]*[ \t]*['']s	{
-			  FL; yylval.nump = PARSEP->newNumber(yylval.fl,(char*)yytext);
+  [0-9][_0-9]*[ \t\n]*['']s	{
+			  FL; LINECHECK(); yylval.nump = PARSEP->newNumber(yylval.fl,(char*)yytext);
                           return yaINTNUM;
 			}
   [0-9][_0-9]*		{

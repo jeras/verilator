@@ -107,6 +107,7 @@ private:
     bool	m_doNConst;	// Enable non-constant-child simplifications
     bool	m_doShort;	// Remove expressions that short circuit
     bool	m_doV;		// Verilog, not C++ conversion
+    bool	m_doGenerate;	// Postpone width checking inside generate
     AstNodeModule*	m_modp;		// Current module
     AstNode*	m_scopep;	// Current scope
 
@@ -173,13 +174,16 @@ private:
 	return rnodep->lhsp()->castConst();
     }
     static bool operandAndOrSame(AstNode* nodep) {
+	// OR( AND(VAL,x), AND(VAL,y)) -> AND(VAL,OR(x,y))
+	// OR( AND(x,VAL), AND(y,VAL)) -> AND(OR(x,y),VAL)
 	AstNodeBiop* np = nodep->castNodeBiop();
 	AstNodeBiop* lp = np->lhsp()->castNodeBiop();
 	AstNodeBiop* rp = np->rhsp()->castNodeBiop();
 	return (lp && rp
 		&& lp->width()==rp->width()
 		&& lp->type()==rp->type()
-		&& operandsSame(lp->lhsp(),rp->lhsp()));
+		&& (operandsSame(lp->lhsp(),rp->lhsp())
+		    || operandsSame(lp->rhsp(),rp->rhsp())));
     }
     static bool matchOrAndNot(AstNodeBiop* nodep) {
 	// AstOr{$a, AstAnd{AstNot{$b}, $c}} if $a.width1, $a==$b => AstOr{$a,$c}
@@ -368,6 +372,11 @@ private:
     // Extraction checks
     bool warnSelect(AstSel* nodep) {
 	AstNode* basefromp = AstArraySel::baseFromp(nodep);
+	if (m_doGenerate) {
+	    // Never checked yet
+	    V3Width::widthParamsEdit(nodep);
+	    nodep->iterateChildren(*this);	// May need "constifying"
+	}
 	if (AstNodeVarRef* varrefp = basefromp->castNodeVarRef()) {
 	    AstVar* varp = varrefp->varp();
 	    if (!varp->dtypep()) varp->v3fatalSrc("Data type lost");
@@ -404,7 +413,11 @@ private:
 	    return node1p->sameTree(node2p);
 	}
 	else if (node1p->castVarRef() && node2p->castVarRef()) {
-	    return node1p->sameTree(node2p);
+	    // Avoid comparing widthMin's, which results in lost optimization attempts
+	    // If cleanup sameTree to be smarter, this can be restored.
+	    //return node1p->sameTree(node2p);
+	    return node1p->castVarRef()->varp() == node2p->castVarRef()->varp()
+		&& node1p->castVarRef()->lvalue() == node2p->castVarRef()->lvalue();
 	} else {
 	    return false;
 	}
@@ -442,7 +455,7 @@ private:
 	    oldp->v3fatalSrc("Already constant??\n");
 	}
 	AstNode* newp = new AstConst(oldp->fileline(), num);
-	newp->widthSignedFrom(oldp);
+	newp->dtypeFrom(oldp);
 	if (debug()>5) oldp->dumpTree(cout,"  const_old: ");
 	if (debug()>5) newp->dumpTree(cout,"       _new: ");
 	oldp->replaceWith(newp);
@@ -477,7 +490,7 @@ private:
 	    AstNode* newp = new AstAnd(nodep->fileline(),
 				       new AstConst(nodep->fileline(), 0),
 				       checkp->unlinkFrBack());
-	    newp->widthSignedFrom(nodep);
+	    newp->dtypeFrom(nodep);
 	    nodep->replaceWith(newp);
 	    nodep->deleteTree(); nodep=NULL;
 	}
@@ -524,9 +537,23 @@ private:
     void replaceWChild(AstNode* nodep, AstNode* childp) {
 	// NODE(..., CHILD(...)) -> CHILD(...)
 	childp->unlinkFrBackWithNext();
-	childp->widthSignedFrom(nodep);
+	childp->dtypeFrom(nodep);
 	nodep->replaceWith(childp);
 	nodep->deleteTree(); nodep=NULL;
+    }
+
+    //! Replace a ternary node with its RHS after iterating
+    //! Used with short-circuting, where the RHS has not yet been iterated.
+    void replaceWIteratedRhs(AstNodeTriop* nodep) {
+	if (AstNode *rhsp = nodep->rhsp()) rhsp->iterateAndNext(*this);
+	replaceWChild(nodep, nodep->rhsp());	// May have changed
+    }
+
+    //! Replace a ternary node with its THS after iterating
+    //! Used with short-circuting, where the THS has not yet been iterated.
+    void replaceWIteratedThs(AstNodeTriop* nodep) {
+	if (AstNode *thsp = nodep->thsp()) thsp->iterateAndNext(*this);
+	replaceWChild(nodep, nodep->thsp());	// May have changed
     }
     void replaceWLhs(AstNodeUniop* nodep) {
 	// Keep LHS, remove RHS
@@ -584,7 +611,9 @@ private:
 	//nodep->dumpTree(cout, "  repAsvRUp_new: ");
     }
     void replaceAndOr (AstNodeBiop* nodep) {
-	// Or(And(CONSTll,lr),And(CONSTrl==ll,rr)) -> And(CONSTll,Or(lr,rr))
+	//  OR  (AND (CONSTll,lr), AND(CONSTrl==ll,rr))    -> AND (CONSTll, OR(lr,rr))
+	//  OR  (AND (CONSTll,lr), AND(CONSTrl,    rr=lr)) -> AND (OR(ll,rl), rr)
+	// nodep ^lp  ^llp   ^lrp  ^rp  ^rlp       ^rrp
 	// (Or/And may also be reversed)
 	AstNodeBiop* lp = nodep->lhsp()->unlinkFrBack()->castNodeBiop();
 	AstNode* llp = lp->lhsp()->unlinkFrBack();
@@ -593,12 +622,23 @@ private:
 	AstNode* rlp = rp->lhsp()->unlinkFrBack();
 	AstNode* rrp = rp->rhsp()->unlinkFrBack();
 	nodep->replaceWith(lp);
-	lp->lhsp(llp);
-	lp->rhsp(nodep);
-	nodep->lhsp(lrp);
-	nodep->rhsp(rrp);
-	rp->deleteTree();
-	rlp->deleteTree();
+	if (operandsSame(llp,rlp)) {
+	    lp->lhsp(llp);
+	    lp->rhsp(nodep);
+	    nodep->lhsp(lrp);
+	    nodep->rhsp(rrp);
+	    rp->deleteTree();
+	    rlp->deleteTree();
+	} else if (operandsSame(lrp, rrp)) {
+	    lp->lhsp(nodep);
+	    lp->rhsp(rrp);
+	    nodep->lhsp(llp);
+	    nodep->rhsp(rlp);
+	    rp->deleteTree();
+	    lrp->deleteTree();
+	} else {
+	    nodep->v3fatalSrc("replaceAndOr on something operandAndOrSame shouldn't have matched");
+	}
 	//nodep->dumpTree(cout, "  repAndOr_new: ");
     }
     void replaceShiftSame (AstNodeBiop* nodep) {
@@ -626,7 +666,7 @@ private:
 	AstNode* newp = (nodep->castExtendS()
 			 ? (new AstExtendS(nodep->fileline(), arg0p))->castNode()
 			 : (new AstExtend (nodep->fileline(), arg0p))->castNode());
-	newp->widthSignedFrom(nodep);
+	newp->dtypeFrom(nodep);
 	nodep->replaceWith(newp); nodep->deleteTree(); nodep=NULL;
     }
     void replacePowShift (AstNodeBiop* nodep) {  // Pow or PowS
@@ -635,8 +675,8 @@ private:
 	AstShiftL* newp = new AstShiftL(nodep->fileline(),
 					new AstConst(nodep->fileline(), 1),
 					rhsp);
-	newp->widthSignedFrom(nodep);
-	newp->lhsp()->widthSignedFrom(nodep);
+	newp->dtypeFrom(nodep);
+	newp->lhsp()->dtypeFrom(nodep);
 	nodep->replaceWith(newp); nodep->deleteTree(); nodep=NULL;
     }
     void replaceMulShift (AstMul* nodep) {  // Mul, but not MulS as not simple shift
@@ -645,7 +685,7 @@ private:
 	AstNode* opp = nodep->rhsp()->unlinkFrBack();
 	AstShiftL* newp = new AstShiftL(nodep->fileline(),
 					opp, new AstConst(nodep->fileline(), amount));
-	newp->widthSignedFrom(nodep);
+	newp->dtypeFrom(nodep);
 	nodep->replaceWith(newp); nodep->deleteTree(); nodep=NULL;
     }
     void replaceDivShift (AstDiv* nodep) {  // Mul, but not MulS as not simple shift
@@ -654,7 +694,7 @@ private:
 	AstNode* opp = nodep->lhsp()->unlinkFrBack();
 	AstShiftR* newp = new AstShiftR(nodep->fileline(),
 					opp, new AstConst(nodep->fileline(), amount));
-	newp->widthSignedFrom(nodep);
+	newp->dtypeFrom(nodep);
 	nodep->replaceWith(newp); nodep->deleteTree(); nodep=NULL;
     }
     void replaceShiftOp (AstNodeBiop* nodep) {
@@ -714,11 +754,11 @@ private:
 		newp = new AstShiftL(nodep->fileline(), ap,
 				     new AstConst(nodep->fileline(), newshift));
 	    }
-	    newp->widthSignedFrom(nodep);
+	    newp->dtypeFrom(nodep);
 	    newp = new AstAnd (nodep->fileline(),
 			       newp,
 			       new AstConst (nodep->fileline(), mask));
-	    newp->widthSignedFrom(nodep);
+	    newp->dtypeFrom(nodep);
 	    nodep->replaceWith(newp); nodep->deleteTree(); nodep=NULL;
 	    //newp->dumpTree(cout, "  repShiftShift_new: ");
 	    newp->accept(*this);	// Further reduce, either node may have more reductions.
@@ -838,16 +878,14 @@ private:
 	    // Form ranges
 	    AstSel*  sel1p = new AstSel(conp->fileline(), rhsp,  lsb1, msb1-lsb1+1);
 	    AstSel*  sel2p = new AstSel(conp->fileline(), rhs2p, lsb2, msb2-lsb2+1);
-	    sel1p->width(msb1-lsb1+1,msb1-lsb1+1);
-	    sel2p->width(msb2-lsb2+1,msb2-lsb2+1);
 	    // Make new assigns of same flavor as old one
 	    //*** Not cloneTree; just one node.
 	    AstNode* newp = NULL;
 	    if (!need_temp) {
 		AstNodeAssign* asn1ap=nodep->cloneType(lc1p, sel1p)->castNodeAssign();
 		AstNodeAssign* asn2ap=nodep->cloneType(lc2p, sel2p)->castNodeAssign();
-		asn1ap->width(msb1-lsb1+1,msb1-lsb1+1);
-		asn2ap->width(msb2-lsb2+1,msb2-lsb2+1);
+		asn1ap->dtypeFrom(sel1p);
+		asn2ap->dtypeFrom(sel2p);
 		// cppcheck-suppress nullPointer  // addNext deals with it
 		newp = newp->addNext(asn1ap);
 		// cppcheck-suppress nullPointer  // addNext deals with it
@@ -876,10 +914,10 @@ private:
 		AstNodeAssign* asn2bp=nodep->cloneType
 		    (lc2p, new AstVarRef(sel2p->fileline(), temp2p, false))
 		    ->castNodeAssign();
-		asn1ap->width(msb1-lsb1+1,msb1-lsb1+1);
-		asn1bp->width(msb1-lsb1+1,msb1-lsb1+1);
-		asn2ap->width(msb2-lsb2+1,msb2-lsb2+1);
-		asn2bp->width(msb2-lsb2+1,msb2-lsb2+1);
+		asn1ap->dtypeFrom(temp1p);
+		asn1bp->dtypeFrom(temp1p);
+		asn2ap->dtypeFrom(temp2p);
+		asn2bp->dtypeFrom(temp2p);
 		// This order matters
 		// cppcheck-suppress nullPointer  // addNext deals with it
 		newp = newp->addNext(asn1ap);
@@ -925,7 +963,7 @@ private:
 	AstAnd* newp = new AstAnd(nodep->fileline(),
 				  new AstConst(nodep->fileline(), val),
 				  fromp);
-	newp->width(nodep->width(), nodep->width());  // widthMin no longer applicable
+	newp->dtypeSetLogicSized(nodep->width(), nodep->width(), AstNumeric::UNSIGNED);  // widthMin no longer applicable if different C-expanded width
 	nodep->replaceWith(newp);
 	nodep->deleteTree(); nodep=NULL;
 	if (debug()>=9) newp->dumpTree(cout,"       _new: ");
@@ -1076,8 +1114,8 @@ private:
 	    // expression, not the potentially smaller lsb1p's width
 	    newlsbp = new AstAdd(lsb1p->fileline(),
 				 lsb2p, new AstExtend(lsb1p->fileline(), lsb1p));
-	    newlsbp->widthFrom(lsb2p); // Unsigned
-	    newlsbp->castAdd()->rhsp()->widthFrom(lsb2p); // Unsigned
+	    newlsbp->dtypeFrom(lsb2p); // Unsigned
+	    newlsbp->castAdd()->rhsp()->dtypeFrom(lsb2p);
 	}
 	AstSel* newp = new AstSel(nodep->fileline(),
 				  fromp,
@@ -1137,7 +1175,7 @@ private:
 				  fromp,
 				  new AstConst(lsbp->fileline(), lsbp->toUInt() % fromp->width()),
 				  widthp);
-	newp->widthSignedFrom(nodep);
+	newp->dtypeFrom(nodep);
 	nodep->replaceWith(newp); nodep->deleteTree(); nodep=NULL;
     }
 
@@ -1155,7 +1193,7 @@ private:
 			       bilhsp, lsbp->cloneTree(true), widthp->cloneTree(true)));
 	fromp->rhsp(new AstSel(nodep->fileline(),
 			       birhsp, lsbp, widthp));
-	fromp->widthSignedFrom(nodep);
+	fromp->dtypeFrom(nodep);
 	nodep->replaceWith(fromp); nodep->deleteTree(); nodep=NULL;
     }
     void replaceSelIntoUniop(AstSel* nodep) {
@@ -1169,7 +1207,7 @@ private:
 	//
 	fromp->lhsp(new AstSel(nodep->fileline(),
 			       bilhsp, lsbp->cloneTree(true), widthp->cloneTree(true)));
-	fromp->widthSignedFrom(nodep);
+	fromp->dtypeFrom(nodep);
 	nodep->replaceWith(fromp); nodep->deleteTree(); nodep=NULL;
     }
 
@@ -1220,16 +1258,6 @@ private:
     // Not constant propagated (for today) because AstMath::isOpaque is set
     // Someday if lower is constant, convert to quoted "string".
 
-    virtual void visit(AstAttrOf* nodep, AstNUser*) {
-	// Don't iterate children, don't want to lose VarRef.
-	if (nodep->attrType()==AstAttrType::EXPR_BITS) {
-	    if (!nodep->fromp() || !nodep->fromp()->widthMin()) nodep->v3fatalSrc("Unsized expression");
-	    V3Number num (nodep->fileline(), 32, nodep->fromp()->widthMin());
-	    replaceNum(nodep, num); nodep=NULL;
-	} else {
-	    nodep->v3fatalSrc("Missing ATTR type case");
-	}
-    }
     bool onlySenItemInSenTree(AstNodeSenItem* nodep) {
 	// Only one if it's not in a list
 	return (!nodep->nextp() && nodep->backp()->nextp() != nodep);
@@ -1681,6 +1709,8 @@ private:
     //    v--- *1* These ops are always first, as we warn before replacing
     //    v--- *V* This op is a verilog op, only in m_doV mode
     //    v--- *C* This op works on all constant children, allowed in m_doConst mode
+    //    v--- *S* This op specifies a type should use short-circuting of its lhs op
+
     TREEOP1("AstSel{warnSelect(nodep)}",	"NEVER");
     // Generic constants on both side.  Do this first to avoid other replacements
     TREEOPC("AstNodeBiop {$lhsp.castConst, $rhsp.castConst}",  "replaceConst(nodep)");
@@ -1688,7 +1718,11 @@ private:
     // Zero on one side or the other
     TREEOP ("AstAdd   {$lhsp.isZero, $rhsp}",	"replaceWRhs(nodep)");
     TREEOP ("AstAnd   {$lhsp.isZero, $rhsp, isTPure($rhsp)}",	"replaceZero(nodep)");  // Can't use replaceZeroChkPure as we make this pattern in ChkPure
+    // This visit function here must allow for short-circuiting.
+    TREEOPS("AstLogAnd   {$lhsp.isZero}",	"replaceZero(nodep)");
     TREEOP ("AstLogAnd{$lhsp.isZero, $rhsp}",	"replaceZero(nodep)");
+    // This visit function here must allow for short-circuiting.
+    TREEOPS("AstLogOr   {$lhsp.isOne}",		"replaceNum(nodep, 1)");
     TREEOP ("AstLogOr {$lhsp.isZero, $rhsp}",	"replaceWRhs(nodep)");
     TREEOP ("AstDiv   {$lhsp.isZero, $rhsp}",	"replaceZeroChkPure(nodep,$rhsp)");
     TREEOP ("AstDivS  {$lhsp.isZero, $rhsp}",	"replaceZeroChkPure(nodep,$rhsp)");
@@ -1742,6 +1776,9 @@ private:
     TREEOPC("AstNodeCond{$condp.isZero,       $expr1p.castConst, $expr2p.castConst}", "replaceWChild(nodep,$expr2p)");
     TREEOPC("AstNodeCond{$condp.isNeqZero,    $expr1p.castConst, $expr2p.castConst}", "replaceWChild(nodep,$expr1p)");
     TREEOP ("AstNodeCond{$condp, operandsSame($expr1p,,$expr2p)}","replaceWChild(nodep,$expr1p)");
+    // This visit function here must allow for short-circuiting.
+    TREEOPS("AstCond {$lhsp.isZero}",		"replaceWIteratedThs(nodep)");
+    TREEOPS("AstCond {$lhsp.isNeqZero}",	"replaceWIteratedRhs(nodep)");
     TREEOP ("AstCond{$condp->castNot(),       $expr1p, $expr2p}", "AstCond{$condp->op1p(), $expr2p, $expr1p}");
     TREEOP ("AstNodeCond{$condp.width1, $expr1p.width1,   $expr1p.isAllOnes, $expr2p}", "AstLogOr {$condp, $expr2p}");  // a?1:b == a||b
     TREEOP ("AstNodeCond{$condp.width1, $expr1p.width1,   $expr1p,    $expr2p.isZero}", "AstLogAnd{$condp, $expr1p}");  // a?b:0 == a&&b
@@ -1915,6 +1952,8 @@ private:
     TREEOPV("AstSel{$fromp.castXnor,$lhsp.castConst}",	"replaceSelIntoUniop(nodep)");
     // Conversions
     TREEOPV("AstRedXnor{$lhsp}",		"AstNot{AstRedXor{$lhsp}}");  // Just eliminate XNOR's
+    // This visit function here must allow for short-circuiting.
+    TREEOPS("AstLogIf {$lhsp.isZero}",		"replaceNum(nodep, 1)");
     TREEOPV("AstLogIf {$lhsp, $rhsp}",		"AstLogOr{AstLogNot{$lhsp},$rhsp}");
     TREEOPV("AstLogIff{$lhsp, $rhsp}",		"AstLogNot{AstXor{$lhsp,$rhsp}}");
     // Strings
@@ -1948,6 +1987,7 @@ public:
     // Processing Mode Enum
     enum ProcMode {
 	PROC_PARAMS,
+	PROC_GENERATE,
 	PROC_LIVE,
 	PROC_V_WARN,
 	PROC_V_NOWARN,
@@ -1963,6 +2003,7 @@ public:
 	m_doNConst = false;
 	m_doShort = true;	// Presently always done
 	m_doV = false;
+	m_doGenerate = false;	// Inside generate conditionals
 	m_warn = false;
 	m_wremove = true;  // Overridden in visitors
 	m_modp = NULL;
@@ -1970,6 +2011,7 @@ public:
 	//
 	switch (pmode) {
 	case PROC_PARAMS:	m_doV = true;  m_doNConst = true; m_params = true; m_required = true; break;
+	case PROC_GENERATE:	m_doV = true;  m_doNConst = true; m_params = true; m_required = true; m_doGenerate = true; break;
 	case PROC_LIVE:		break;
 	case PROC_V_WARN:	m_doV = true;  m_doNConst = true; m_warn = true; break;
 	case PROC_V_NOWARN:	m_doV = true;  m_doNConst = true; break;
@@ -1988,12 +2030,46 @@ public:
 //######################################################################
 // Const class functions
 
+//! Force this cell node's parameter list to become a constant
+//! @return  Pointer to the edited node.
 AstNode* V3Const::constifyParamsEdit(AstNode* nodep) {
     //if (debug()>0) nodep->dumpTree(cout,"  forceConPRE : ");
-    // Resize even if the node already has a width, because burried in the treee we may
-    // have a node we just created with signing, etc, that isn't sized yet.
-    nodep = V3Width::widthParamsEdit(nodep); // Make sure we've sized everything first
-    ConstVisitor visitor (ConstVisitor::PROC_PARAMS);
+    // Resize even if the node already has a width, because buried in the tree
+    // we may have a node we just created with signing, etc, that isn't sized yet.
+
+    // Make sure we've sized everything first
+    nodep = V3Width::widthParamsEdit(nodep);
+    ConstVisitor visitor(ConstVisitor::PROC_PARAMS);
+    if (AstVar* varp=nodep->castVar()) {
+	// If a var wants to be constified, it's really a param, and
+	// we want the value to be constant.  We aren't passed just the
+	// init value because we need widthing above to handle the var's type.
+	if (varp->valuep()) visitor.mainAcceptEdit(varp->valuep());
+    } else {
+	nodep = visitor.mainAcceptEdit(nodep);
+    }
+    // Because we do edits, nodep links may get trashed and core dump this.
+    //if (debug()>0) nodep->dumpTree(cout,"  forceConDONE: ");
+    return nodep;
+}
+
+//! Force this cell node's parameter list to become a constant inside generate.
+//! If we are inside a generated "if", "case" or "for", we don't want to
+//! trigger warnings when we deal with the width. It is possible that these
+//! are spurious, existing within sub-expressions that will not actually be
+//! generated. Since such occurrences, must be constant, in order to be
+//! someting a generate block can depend on, we can wait until later to do the
+//! width check.
+//! @return  Pointer to the edited node.
+AstNode* V3Const::constifyGenerateParamsEdit(AstNode* nodep) {
+    //if (debug()>0) nodep->dumpTree(cout,"  forceConPRE : ");
+    // Resize even if the node already has a width, because buried in the tree
+    // we may have a node we just created with signing, etc, that isn't sized
+    // yet.
+
+    // Make sure we've sized everything first
+    nodep = V3Width::widthGenerateParamsEdit(nodep);
+    ConstVisitor visitor(ConstVisitor::PROC_GENERATE);
     if (AstVar* varp=nodep->castVar()) {
 	// If a var wants to be constified, it's really a param, and
 	// we want the value to be constant.  We aren't passed just the

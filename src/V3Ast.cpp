@@ -53,6 +53,9 @@ bool AstUser3InUse::s_userBusy=false;
 bool AstUser4InUse::s_userBusy=false;
 bool AstUser5InUse::s_userBusy=false;
 
+int AstNodeDType::s_uniqueNum = 0;
+
+
 //######################################################################
 // V3AstType
 
@@ -72,14 +75,12 @@ void AstNode::init() {
     m_op3p = NULL;
     m_op4p = NULL;
     m_iterpp = NULL;
+    m_dtypep = NULL;
     m_clonep = NULL;
     m_cloneCnt = 0;
     // Attributes
-    m_numeric = (int)AstNumeric::UNSIGNED;
     m_didWidth = false;
     m_doingWidth = false;
-    m_width = 0;
-    m_widthMin = 0;
     m_user1p = NULL;
     m_user1Cnt = 0;
     m_user2p = NULL;
@@ -227,15 +228,6 @@ string AstNode::quoteName(const string& namein) {
 	}
     }
     return out;
-}
-
-int AstNode::widthPow2() const {
-    // I.e.  width 30 returns 32, width 32 returns 32.
-    uint32_t width = this->width();
-    for (int p2=30; p2>=0; p2--) {
-	if (width > (1UL<<p2)) return (1UL<<(p2+1));
-    }
-    return 1;
 }
 
 //######################################################################
@@ -856,6 +848,9 @@ AstNode* AstNode::acceptSubtreeReturnEdits(AstNVisitor& v, AstNUser* vup) {
 void AstNode::cloneRelinkTree() {
     if (!this) return;
     for (AstNode* nodep=this; nodep; nodep=nodep->m_nextp) {
+	if (m_dtypep && m_dtypep->clonep()) {
+	    m_dtypep = m_dtypep->clonep()->castNodeDType();
+	}
 	nodep->cloneRelink();
 	nodep->m_op1p->cloneRelinkTree();
 	nodep->m_op2p->cloneRelinkTree();
@@ -876,8 +871,7 @@ bool AstNode::sameTreeIter(AstNode* node2p, bool ignNext) {
     if (this==NULL && node2p==NULL) return true;
     if (this==NULL || node2p==NULL) return false;
     if (this->type() != node2p->type()
-	|| this->width() != node2p->width()
-	|| this->numeric() != node2p->numeric()
+	|| this->dtypep() != node2p->dtypep()
 	|| !this->same(node2p)) {
 	return false;
     }
@@ -1011,9 +1005,10 @@ void AstNode::dumpTreeAndNext(ostream& os, const string& indent, int maxDepth) {
 void AstNode::dumpTreeFile(const string& filename, bool append) {
     if (v3Global.opt.dumpTree()) {
 	{   // Write log & close
+	    UINFO(2,"Dumping "<<filename<<endl);
 	    const auto_ptr<ofstream> logsp (V3File::new_ofstream(filename, append));
 	    if (logsp->fail()) v3fatalSrc("Can't write "<<filename);
-	    *logsp<<"Tree Dump from <e"<<dec<<editCountLast()<<">";
+	    *logsp<<"Verilator Tree Dump (format 0x3900) from <e"<<dec<<editCountLast()<<">";
 	    *logsp<<" to <e"<<dec<<editCountGbl()<<">"<<endl;
 	    if (editCountGbl()==editCountLast()
 		&& !(v3Global.opt.dumpTree()>=9)) {
@@ -1047,6 +1042,56 @@ void AstNode::v3errorEnd(ostringstream& str) const {
     } else {
 	V3Error::v3errorEnd(str);
     }
+}
+
+//======================================================================
+// Data type conversion
+
+void AstNode::dtypeChgSigned(bool flag) {
+    if (!dtypep()) this->v3fatalSrc("No dtype when changing to (un)signed");
+    dtypeChgWidthSigned(dtypep()->width(), dtypep()->widthMin(),
+			flag ? AstNumeric::SIGNED : AstNumeric::UNSIGNED);
+}
+void AstNode::dtypeChgWidth(int width, int widthMin) {
+    if (!dtypep()) this->v3fatalSrc("No dtype when changing width");  // Use ChgWidthSigned(...UNSIGNED) otherwise
+    dtypeChgWidthSigned(width, widthMin, dtypep()->numeric());
+}
+
+void AstNode::dtypeChgWidthSigned(int width, int widthMin, bool issigned) {
+    AstNumeric numeric = issigned ? AstNumeric::SIGNED : AstNumeric::UNSIGNED;
+    if (!dtypep()) {
+	// We allow dtypep() to be null, as before/during widthing dtypes are not resolved
+	dtypeSetLogicSized(width, widthMin, numeric);
+    } else {
+	if (width==dtypep()->width()
+	    && widthMin==dtypep()->widthMin()
+	    && numeric==dtypep()->numeric()) return;  // Correct already
+	// FUTURE: We may be pointing at a two state data type, and this may
+	// convert it to logic.  Since the AstVar remains correct, we
+	// work OK but this assumption may break in the future.
+	// Note we can't just clone and do a widthForce, as if it's a BasicDType
+	// the msb() indications etc will be incorrect.
+	dtypeSetLogicSized(width, widthMin, numeric);
+    }
+}
+
+AstNodeDType* AstNode::findBasicDType(AstBasicDTypeKwd kwd) {
+    // For 'simple' types we use the global directory.  These are all unsized.
+    // More advanced types land under the module/task/etc
+    return v3Global.rootp()->typeTablep()
+	->findBasicDType(fileline(), kwd);
+}
+AstNodeDType* AstNode::findBitDType(int width, int widthMin, AstNumeric numeric) {
+    return v3Global.rootp()->typeTablep()
+	->findLogicBitDType(fileline(), AstBasicDTypeKwd::BIT, width, widthMin, numeric);
+}
+AstNodeDType* AstNode::findLogicDType(int width, int widthMin, AstNumeric numeric) {
+    return v3Global.rootp()->typeTablep()
+	->findLogicBitDType(fileline(), AstBasicDTypeKwd::LOGIC, width, widthMin, numeric);
+}
+AstBasicDType* AstNode::findInsertSameDType(AstBasicDType* nodep) {
+    return v3Global.rootp()->typeTablep()
+	->findInsertSameDType(nodep);
 }
 
 //######################################################################

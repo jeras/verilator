@@ -130,7 +130,7 @@ private:
 	// we process in top->bottom order too.
 	while (!m_todoModps.empty()) {
 	    AstNodeModule* nodep = m_todoModps.front(); m_todoModps.pop_front();
-	    if (!nodep->user5Inc()) {  // Process once; note clone() must clear so we do it again
+	    if (!nodep->user5SetOnce()) {  // Process once; note clone() must clear so we do it again
 		UINFO(4," MOD   "<<nodep<<endl);
 		nodep->iterateChildren(*this);
 		// Note this may add to m_todoModps
@@ -158,7 +158,7 @@ private:
 
     // Make sure all parameters are constantified
     virtual void visit(AstVar* nodep, AstNUser*) {
-	if (!nodep->user5Inc()) {  // Process once
+	if (!nodep->user5SetOnce()) {  // Process once
 	    nodep->iterateChildren(*this);
 	    if (nodep->isParam()) {
 		if (!nodep->hasSimpleInit()) { nodep->v3fatalSrc("Parameter without initial value"); }
@@ -189,8 +189,12 @@ private:
     virtual void visit(AstGenIf* nodep, AstNUser*) {
 	UINFO(9,"  GENIF "<<nodep<<endl);
 	nodep->condp()->iterateAndNext(*this);
-	V3Width::widthParamsEdit(nodep);  // Param typed widthing will NOT recurse the body
-	V3Const::constifyParamsEdit(nodep->condp());  // condp may change
+	// We suppress errors when widthing params since short-circuiting in
+	// the conditional evaluation may mean these error can never occur. We
+	// then make sure that short-circuiting is used by constifyParamsEdit.
+	V3Width::widthGenerateParamsEdit(nodep);  // Param typed widthing will
+						  // NOT recurse the body.
+	V3Const::constifyGenerateParamsEdit(nodep->condp()); // condp may change
 	if (AstConst* constp = nodep->condp()->castConst()) {
 	    AstNode* keepp = (constp->isZero()
 			      ? nodep->elsesp()
@@ -207,6 +211,11 @@ private:
 	    nodep->condp()->v3error("Generate If condition must evaluate to constant");
 	}
     }
+
+    //! Parameter subsitution for generated for loops.
+    //! @todo Unlike generated IF, we don't have to worry about short-circuiting the conditional
+    //!       expression, since this is currently restricted to simple comparisons. If we ever do
+    //!       move to more generic constant expressions, such code will be neede here.
     virtual void visit(AstGenFor* nodep, AstNUser*) {
 	// We parse a very limited form of FOR, so we don't need to do a full
 	// simulation to unroll the loop
@@ -220,7 +229,8 @@ private:
 	AstNode* keepp = NULL;
 	nodep->exprp()->iterateAndNext(*this);
 	V3Case::caseLint(nodep);
-	V3Width::widthParamsEdit(nodep);  // Param typed widthing will NOT recurse the body
+	V3Width::widthParamsEdit(nodep);  // Param typed widthing will NOT recurse the body,
+					  // don't trigger errors yet.
 	V3Const::constifyParamsEdit(nodep->exprp());  // exprp may change
 	AstConst* exprp = nodep->exprp()->castConst();
 	// Constify
@@ -301,6 +311,7 @@ void ParamVisitor::visit(AstCell* nodep, AstNUser*) {
 	if (debug()>8) nodep->paramsp()->dumpTreeAndNext(cout,"-cellparams:\t");
 	for (AstPin* pinp = nodep->paramsp(); pinp; pinp=pinp->nextp()->castPin()) {
 	    if (!pinp) nodep->v3fatalSrc("Non pin under cell params\n");
+	    if (!pinp->exprp()) continue; // No-connect
 	    AstVar* modvarp = pinp->modVarp();
 	    if (!modvarp) {
 		pinp->v3error("Parameter not found in sub-module: Param "<<pinp->name()<<" of "<<nodep->prettyName());
@@ -312,7 +323,7 @@ void ParamVisitor::visit(AstCell* nodep, AstNUser*) {
 		if (!constp) {
 		    //if (debug()) pinp->dumpTree(cout,"error:");
 		    pinp->v3error("Can't convert defparam value to constant: Param "<<pinp->name()<<" of "<<nodep->prettyName());
-		    pinp->exprp()->replaceWith(new AstConst(pinp->fileline(), V3Number(pinp->fileline(), pinp->width(), 0)));
+		    pinp->exprp()->replaceWith(new AstConst(pinp->fileline(), V3Number(pinp->fileline(), modvarp->width(), 0)));
 		} else if (origconstp && constp->sameTree(origconstp)) {
 		    // Setting parameter to its default value.  Just ignore it.
 		    // This prevents making additional modules, and makes coverage more
@@ -353,7 +364,7 @@ void ParamVisitor::visit(AstCell* nodep, AstNUser*) {
 		// However links outside the module (like on the upper cells) will not.
 		modp = nodep->modp()->cloneTree(false);
 		modp->name(newname);
-		modp->user5(0); // We need to re-recurse this module once changed
+		modp->user5(false); // We need to re-recurse this module once changed
 		nodep->modp()->addNextHere(modp);  // Keep tree sorted by cell occurrences
 
 		m_modNameMap.insert(make_pair(modp->name(), ModInfo(modp)));
@@ -380,7 +391,7 @@ void ParamVisitor::visit(AstCell* nodep, AstNUser*) {
 		// Assign parameters to the constants specified
 		for (AstPin* pinp = nodep->paramsp(); pinp; pinp=pinp->nextp()->castPin()) {
 		    AstVar* modvarp = pinp->modVarp();
-		    if (modvarp) {
+		    if (modvarp && pinp->exprp()) {
 			AstConst* constp = pinp->exprp()->castConst();
 			// Remove any existing parameter
 			if (modvarp->valuep()) modvarp->valuep()->unlinkFrBack()->deleteTree();

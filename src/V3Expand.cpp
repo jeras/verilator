@@ -127,13 +127,13 @@ private:
 				   new AstConst(nodep->fileline(), word));
 	} else if (nodep->isQuad() && word==0) {
 	    AstNode* quadfromp = nodep->cloneTree(true);
-	    quadfromp->width(VL_QUADSIZE,quadfromp->widthMin());
+	    quadfromp->dtypeSetBitSized(VL_QUADSIZE,quadfromp->widthMin(),AstNumeric::UNSIGNED);
 	    return new AstCCast (nodep->fileline(),
 				 quadfromp,
 				 VL_WORDSIZE);
 	} else if (nodep->isQuad() && word==1) {
 	    AstNode* quadfromp = nodep->cloneTree(true);
-	    quadfromp->width(VL_QUADSIZE,quadfromp->widthMin());
+	    quadfromp->dtypeSetBitSized(VL_QUADSIZE,quadfromp->widthMin(),AstNumeric::UNSIGNED);
 	    return new AstCCast (nodep->fileline(),
 				 new AstShiftR (nodep->fileline(),
 						quadfromp,
@@ -311,7 +311,7 @@ private:
 
     // VISITORS
     virtual void visit(AstExtend* nodep, AstNUser*) {
-	if (nodep->user1Inc()) return;  // Process once
+	if (nodep->user1SetOnce()) return;  // Process once
 	nodep->iterateChildren(*this);
 	if (nodep->isWide()) {
 	    // See under ASSIGN(EXTEND)
@@ -320,7 +320,7 @@ private:
 	    AstNode* newp = lhsp;
 	    if (nodep->isQuad()) {
 		if (lhsp->isQuad()) {
-		    lhsp->widthSignedFrom(nodep);	// Just mark it, else nop
+		    lhsp->dtypeFrom(nodep);	// Just mark it, else nop
 		} else if (lhsp->isWide()) {
 		    nodep->v3fatalSrc("extending larger thing into smaller?");
 		} else {
@@ -331,7 +331,7 @@ private:
 		if (lhsp->isQuad() || lhsp->isWide()) {
 		    nodep->v3fatalSrc("extending larger thing into smaller?");
 		} else {
-		    lhsp->widthSignedFrom(nodep);	// Just mark it, else nop
+		    lhsp->dtypeFrom(nodep);	// Just mark it, else nop
 		}
 	    }
 	    replaceWithDelete(nodep,newp); nodep=NULL;
@@ -350,7 +350,7 @@ private:
     }
 
     virtual void visit(AstSel* nodep, AstNUser*) {
-	if (nodep->user1Inc()) return;  // Process once
+	if (nodep->user1SetOnce()) return;  // Process once
 	nodep->iterateChildren(*this);
 	// Remember, Sel's may have non-integer rhs, so need to optimize for that!
 	if (nodep->widthMin()!=(int)nodep->widthConst()) nodep->v3fatalSrc("Width mismatch");
@@ -439,7 +439,7 @@ private:
 	    AstNode* newp = lowp;
 	    if (midp) newp = new AstOr (nodep->fileline(), midp, newp);
 	    if (hip) newp = new AstOr (nodep->fileline(), hip, newp);
-	    newp->widthFrom(nodep);
+	    newp->dtypeFrom(nodep);
 	    replaceWithDelete(nodep,newp); nodep=NULL;
 	}
 	else { // Long/Quad from Long/Quad
@@ -451,11 +451,11 @@ private:
 					   fromp,
 					   dropCondBound(lsbp),
 					   nodep->width());
-	    newp->widthSignedFrom(nodep);
+	    newp->dtypeFrom(nodep);
 	    if (!nodep->isQuad() && fromp->isQuad()) {
 		newp = new AstCCast (newp->fileline(), newp, nodep);
 	    }
-	    newp->widthSignedFrom(nodep);
+	    newp->dtypeFrom(nodep);
 	    replaceWithDelete(nodep,newp); nodep=NULL;
 	}
     }
@@ -647,7 +647,7 @@ private:
     }
 
     virtual void visit(AstConcat* nodep, AstNUser*) {
-	if (nodep->user1Inc()) return;  // Process once
+	if (nodep->user1SetOnce()) return;  // Process once
 	nodep->iterateChildren(*this);
 	if (nodep->isWide()) {
 	    // See under ASSIGN(WIDE)
@@ -664,7 +664,7 @@ private:
 						      new AstConst (nodep->fileline(), rhsshift),
 						      nodep->width()),
 				       rhsp);
-	    newp->widthFrom(nodep); // Unsigned
+	    newp->dtypeFrom(nodep); // Unsigned
 	    replaceWithDelete(nodep,newp); nodep=NULL;
 	}
     }
@@ -687,7 +687,7 @@ private:
     }
 
     virtual void visit(AstReplicate* nodep, AstNUser*) {
-	if (nodep->user1Inc()) return;  // Process once
+	if (nodep->user1SetOnce()) return;  // Process once
 	nodep->iterateChildren(*this);
 	if (nodep->isWide()) {
 	    // See under ASSIGN(WIDE)
@@ -713,11 +713,11 @@ private:
 						     new AstConst (nodep->fileline(), rhsshift),
 						     nodep->width()),
 				      newp);
-		    newp->widthFrom(nodep); // Unsigned
+		    newp->dtypeFrom(nodep); // Unsigned
 		}
 		lhsp->deleteTree();	// Never used
 	    }
-	    newp->widthFrom(nodep); // Unsigned
+	    newp->dtypeFrom(nodep); // Unsigned
 	    replaceWithDelete(nodep,newp); nodep=NULL;
 	}
     }
@@ -732,7 +732,7 @@ private:
 	    AstNode* newp;
 	    if (lhswidth==1) {
 		newp = new AstNegate (nodep->fileline(), lhsp->cloneTree(true));
-		newp->width(VL_WORDSIZE,VL_WORDSIZE);
+		newp->dtypeSetLogicSized(VL_WORDSIZE,VL_WORDSIZE,AstNumeric::UNSIGNED);  // Replicate always unsigned
 	    } else {
 		newp = newAstWordSelClone (lhsp, w);
 		for (unsigned repnum=1; repnum<times; repnum++) {
@@ -748,7 +748,7 @@ private:
     }
 
     virtual void visit(AstChangeXor* nodep, AstNUser*) {
-	if (nodep->user1Inc()) return;  // Process once
+	if (nodep->user1SetOnce()) return;  // Process once
 	nodep->iterateChildren(*this);
 	UINFO(8,"    Wordize ChangeXor "<<nodep<<endl);
 	// -> (0=={or{for each_word{WORDSEL(lhs,#)^WORDSEL(rhs,#)}}}
@@ -763,7 +763,7 @@ private:
     }
 
     void visitEqNeq(AstNodeBiop* nodep) {
-	if (nodep->user1Inc()) return;  // Process once
+	if (nodep->user1SetOnce()) return;  // Process once
 	nodep->iterateChildren(*this);
 	if (nodep->lhsp()->isWide()) {
 	    UINFO(8,"    Wordize EQ/NEQ "<<nodep<<endl);
@@ -789,7 +789,7 @@ private:
     virtual void visit(AstNeq* nodep, AstNUser*) { visitEqNeq (nodep); }
 
     virtual void visit(AstRedOr* nodep, AstNUser*) {
-	if (nodep->user1Inc()) return;  // Process once
+	if (nodep->user1SetOnce()) return;  // Process once
 	nodep->iterateChildren(*this);
 	if (nodep->lhsp()->isWide()) {
 	    UINFO(8,"    Wordize REDOR "<<nodep<<endl);
@@ -813,7 +813,7 @@ private:
 	}
     }
     virtual void visit(AstRedAnd* nodep, AstNUser*) {
-	if (nodep->user1Inc()) return;  // Process once
+	if (nodep->user1SetOnce()) return;  // Process once
 	nodep->iterateChildren(*this);
 	if (nodep->lhsp()->isWide()) {
 	    UINFO(8,"    Wordize REDAND "<<nodep<<endl);
@@ -842,7 +842,7 @@ private:
 	}
     }
     virtual void visit(AstRedXor* nodep, AstNUser*) {
-	if (nodep->user1Inc()) return;  // Process once
+	if (nodep->user1SetOnce()) return;  // Process once
 	nodep->iterateChildren(*this);
 	if (nodep->lhsp()->isWide()) {
 	    UINFO(8,"    Wordize REDXOR "<<nodep<<endl);
@@ -861,13 +861,13 @@ private:
     }
 
     virtual void visit(AstNodeStmt* nodep, AstNUser*) {
-	if (nodep->user1Inc()) return;  // Process once
+	if (nodep->user1SetOnce()) return;  // Process once
 	m_stmtp = nodep;
 	nodep->iterateChildren(*this);
 	m_stmtp = NULL;
     }
     virtual void visit(AstNodeAssign* nodep, AstNUser*) {
-	if (nodep->user1Inc()) return;  // Process once
+	if (nodep->user1SetOnce()) return;  // Process once
 	m_stmtp = nodep;
 	nodep->iterateChildren(*this);
 	bool did = false;

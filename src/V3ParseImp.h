@@ -55,7 +55,7 @@ struct V3ParseBisonYYSType {
 	double		cdouble;
 	bool		cbool;
 	V3UniqState	uniqstate;
-	AstSignedState	signstate;
+	VSignedState	signstate;
 	V3ImportProperty iprop;
 	V3ErrorCode::en	errcodeen;
 
@@ -65,6 +65,7 @@ struct V3ParseBisonYYSType {
 	AstBegin*	beginp;
 	AstCase*	casep;
 	AstCaseItem*	caseitemp;
+	AstCell*	cellp;
 	AstConst*	constp;
 	AstNodeModule*	modulep;
 	AstNodeDType*	dtypep;

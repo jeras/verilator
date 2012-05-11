@@ -46,8 +46,6 @@ class InstVisitor : public AstNVisitor {
 private:
     // NODE STATE
     // Cleared each Cell:
-    //  AstVar::user1p()	-> AstNode*.  Expression connected to given pin
-    //  AstVarRef::user1p()	-> bool.  True if created senitem for parent's connected signal
     //  AstPin::user1p()	-> bool.  True if created assignment already
     AstUser1InUse	m_inuser1;
 
@@ -75,10 +73,6 @@ private:
 	m_cellp = nodep;
 	//VV*****  We reset user1p() on each cell!!!
 	AstNode::user1ClearTree();
-	// Collect pin expressions, so submod->varp->user1p() points to expression it connects to
-	for (AstPin* pinp = nodep->pinsp(); pinp; pinp=pinp->nextp()->castPin()) {
-	    pinp->modVarp()->user1p(pinp->exprp());
-	}
 	nodep->iterateChildren(*this);
 	m_cellp = NULL;
     }
@@ -86,22 +80,22 @@ private:
 	// PIN(p,expr) -> ASSIGNW(VARXREF(p),expr)    (if sub's input)
 	//	      or  ASSIGNW(expr,VARXREF(p))    (if sub's output)
 	UINFO(4,"   PIN  "<<nodep<<endl);
+	if (!nodep->exprp()) return; // No-connect
 	if (debug()>=9) nodep->dumpTree(cout,"  Pin_oldb: ");
 	if (nodep->modVarp()->isOutOnly() && nodep->exprp()->castConst())
 	    nodep->v3error("Output port is connected to a constant pin, electrical short");
 	// Use user1p on the PIN to indicate we created an assign for this pin
-	if (!nodep->user1Inc()) {
+	if (!nodep->user1SetOnce()) {
 	    // Simplify it
-	    V3Inst::pinReconnectSimple(nodep, m_cellp, m_modp);
+	    V3Inst::pinReconnectSimple(nodep, m_cellp, m_modp, false);
 	    // Make a ASSIGNW (expr, pin)
 	    AstNode*  exprp  = nodep->exprp()->cloneTree(false);
-	    if (nodep->width() != nodep->modVarp()->width())
+	    if (exprp->width() != nodep->modVarp()->width())
 		nodep->v3fatalSrc("Width mismatch, should have been handled in pinReconnectSimple\n");
 	    if (nodep->modVarp()->isInout()) {
 		nodep->v3fatalSrc("Unsupported: Verilator is a 2-state simulator");
 	    } else if (nodep->modVarp()->isOutput()) {
 		AstNode* rhsp = new AstVarXRef (exprp->fileline(), nodep->modVarp(), m_cellp->name(), false);
-		rhsp->widthSignedFrom(nodep);
 		AstAssignW* assp = new AstAssignW (exprp->fileline(), exprp, rhsp);
 		m_modp->addStmtp(assp);
 	    } else if (nodep->modVarp()->isInput()) {
@@ -194,6 +188,7 @@ private:
     }
     virtual void visit(AstPin* nodep, AstNUser*) {
 	// Any non-direct pins need reconnection with a part-select
+	if (!nodep->exprp()) return; // No-connect
 	if (m_cellRangep) {
 	    UINFO(4,"   PIN  "<<nodep<<endl);
 	    int pinwidth = nodep->modVarp()->width();
@@ -241,53 +236,59 @@ public:
 //######################################################################
 // Inst class functions
 
-void V3Inst::pinReconnectSimple(AstPin* pinp, AstCell* cellp, AstNodeModule* modp) {
+AstAssignW* V3Inst::pinReconnectSimple(AstPin* pinp, AstCell* cellp, AstNodeModule*,
+				       bool forTristate, bool alwaysCvt) {
     // If a pin connection is "simple" leave it as-is
     // Else create a intermediate wire to perform the interconnect
+    // Return the new assignment, if one was made
     // Note this module calles cloneTree() via new AstVar
     AstVar* pinVarp = pinp->modVarp();
     AstVarRef* connectRefp = pinp->exprp()->castVarRef();
     AstBasicDType* pinBasicp = pinVarp->dtypep()->basicp();  // Maybe NULL
     AstBasicDType* connBasicp = NULL;
+    AstAssignW* assignp = NULL;
     if (connectRefp) connBasicp = connectRefp->varp()->dtypep()->basicp();
     //
-    if (connectRefp
+    if (!alwaysCvt
+	&& connectRefp
 	&& connectRefp->varp()->dtypep()->sameTree(pinVarp->dtypep())
 	&& !connectRefp->varp()->isSc()) { // Need the signal as a 'shell' to convert types
 	// Done.  Same data type
-    } else if (connBasicp
+    } else if (!alwaysCvt
+	       && connBasicp
 	       && pinBasicp
 	       && connBasicp->width() == pinBasicp->width()
 	       && connBasicp->lsb() == pinBasicp->lsb()
 	       && !connectRefp->varp()->isSc()	// Need the signal as a 'shell' to convert types
-	       && pinp->width() == pinVarp->width()
+	       && connBasicp->width() == pinVarp->width()
 	       && 1) {
 	// Done. One to one interconnect won't need a temporary variable.
-    } else if (pinp->exprp()->castConst()) {
+    } else if (!alwaysCvt && !forTristate && pinp->exprp()->castConst()) {
 	// Done. Constant.
     } else {
 	// Make a new temp wire
 	//if (1||debug()>=9) { pinp->dumpTree(cout,"in_pin:"); }
-	AstAssignW* assignp = NULL;
 	AstNode* pinexprp = pinp->exprp()->unlinkFrBack();
-	string newvarname = "__Vcellinp__"+cellp->name()+"__"+pinp->name();
+	string newvarname = ((pinVarp->isOutput() ? "__Vcellout__" : "__Vcellinp__")
+			     +cellp->name()+"__"+pinp->name());
 	AstVar* newvarp = new AstVar (pinVarp->fileline(), AstVarType::MODULETEMP, newvarname, pinVarp);
-	modp->addStmtp(newvarp);
+	// Important to add statement next to cell, in case there is a generate with same named cell
+	cellp->addNextHere(newvarp);
 	if (pinVarp->isInout()) {
 	    pinVarp->v3fatalSrc("Unsupported: Inout connections to pins must be direct one-to-one connection (without any expression)");
 	} else if (pinVarp->isOutput()) {
 	    // See also V3Inst
 	    AstNode* rhsp = new AstVarRef(pinp->fileline(), newvarp, false);
-	    if (pinp->width() > rhsp->width()) {
+	    if (pinVarp->width() > rhsp->width()) {
 		if (rhsp->isSigned()) {
 		    rhsp = new AstExtendS(pinp->fileline(), rhsp);
 		} else {
 		    rhsp = new AstExtend (pinp->fileline(), rhsp);
 		}
-	    } else if (pinp->width() < rhsp->width()) {
-		rhsp = new AstSel    (pinp->fileline(), rhsp, 0, pinp->width());
+	    } else if (pinVarp->width() < rhsp->width()) {
+		rhsp = new AstSel    (pinp->fileline(), rhsp, 0, pinVarp->width());
 	    }
-	    rhsp->widthSignedFrom(pinp);
+	    rhsp->dtypeFrom(pinVarp);  // Need proper widthMin, which may differ from AstSel created above
 	    assignp = new AstAssignW (pinp->fileline(), pinexprp, rhsp);
 	    pinp->exprp(new AstVarRef (pinexprp->fileline(), newvarp, true));
 	} else {
@@ -298,11 +299,11 @@ void V3Inst::pinReconnectSimple(AstPin* pinp, AstCell* cellp, AstNodeModule* mod
 				      pinexprp);
 	    pinp->exprp(new AstVarRef (pinexprp->fileline(), newvarp, false));
 	}
-	pinp->widthSignedFrom(pinp->exprp());
-	if (assignp) modp->addStmtp(assignp);
+	if (assignp) cellp->addNextHere(assignp);
 	//if (1||debug()) { pinp->dumpTree(cout,"  out:"); }
 	//if (1||debug()) { assignp->dumpTree(cout," aout:"); }
     }
+    return assignp;
 }
 
 //######################################################################

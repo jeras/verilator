@@ -92,13 +92,6 @@ private:
 
     virtual void visit(AstVar* nodep, AstNUser*) {
 	nodep->iterateChildren(*this);
-	if (nodep->isIO() && !(nodep->dtypeSkipRefp()->castBasicDType() ||
-			       nodep->dtypeSkipRefp()->castArrayDType())) {
-	    nodep->v3error("Unsupported: Inputs and outputs must be simple data types");
-	}
-	if (nodep->dtypeSkipRefp()->castConstDType()) {
-	    nodep->isConst(true);
-	}
 	if (m_ftaskp) nodep->funcLocal(true);
 	if (nodep->isSigModPublic()) {
 	    nodep->sigModPublic(false);  // We're done with this attribute
@@ -267,10 +260,10 @@ private:
 		    break;
 		default:  // Most operators, just move to next argument
 		    if (!V3Number::displayedFmtLegal(ch)) {
-			nodep->v3error("Unknown $display format code: %"<<ch);
+			nodep->v3error("Unknown $display-like format code: %"<<ch);
 		    } else {
 			if (!argp) {
-			    nodep->v3error("Missing arguments for $display format");
+			    nodep->v3error("Missing arguments for $display-like format");
 			} else {
 			    argp = argp->nextp();
 			}
@@ -280,7 +273,7 @@ private:
 	    }
 	}
 	if (argp) {
-	    argp->v3error("Extra arguments for $display format");
+	    argp->v3error("Extra arguments for $display-like format");
 	}
     }
 

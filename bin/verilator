@@ -174,10 +174,10 @@ sub run {
 	    warn "%Error: export VERILATOR_ROOT=".($ENV{VERILATOR_ROOT}||"")."\n";
 	    warn "%Error: $command\n";
 	}
-	if ($status & 255) {
-	    if (($status & 255) == 8 || ($status & 255) == 11) { # SIGFPA or SIGSEGV
+	if ($status & 127) {
+	    if (($status & 127) == 8 || ($status & 127) == 11) { # SIGFPA or SIGSEGV
 		warn "%Error: Verilator internal fault, sorry.  Consider trying --debug --gdbbt\n" if !$Debug;
-	    } elsif (($status & 255) == 6) {  # SIGABRT
+	    } elsif (($status & 127) == 6) {  # SIGABRT
 		warn "%Error: Verilator aborted.  Consider trying --debug --gdbbt\n" if !$Debug;
 	    } else {
 		warn "%Error: Verilator threw signal $status.  Consider trying --debug --gdbbt\n" if !$Debug;
@@ -521,7 +521,9 @@ changing debug verbosity.  Enabled automatically when --debug specified.
 =item --debugi-<srcfile> <level>
 
 Rarely needed - for developer use.  Set internal debugging level globally
-or on the specified source file to the specified level.
+to the specified debug level (1-10) or set the specified source file to the
+specified level. Higher levels produce more detailed messages (plain
+C<--debug> is equivalent to C<--debugi 4>).
 
 =item +define+I<var>+I<value>
 
@@ -531,9 +533,10 @@ standard across Verilog tools while -D is an alias for GCC compatibility.
 =item --dump-tree
 
 Rarely needed.  Enable writing .tree debug files with dumping level 3,
-which dumps the standard critical stages.  --dump-tree is enabled
-automatically with --debug, so "--debug --no-dump-tree" may be useful if
-the dump files are large and not desired.
+which dumps the standard critical stages.  For details on the format see
+the Verilator Internals manual.  --dump-tree is enabled automatically with
+--debug, so "--debug --no-dump-tree" may be useful if the dump files are
+large and not desired.
 
 =item --dump-treei
 
@@ -928,8 +931,8 @@ Disable the specified warning message.
 Disable all lint related warning messages, and all style warnings.  This is
 equivalent to "-Wno-CASEINCOMPLETE -Wno-CASEOVERLAP -Wno-CASEX
 -Wno-CASEWITHX -Wno-CMPCONST -Wno-ENDLABEL -Wno-IMPLICIT -Wno-LITENDIAN
--Wno-SYNCASYNCNET -Wno-UNDRIVEN -Wno-UNSIGNED -Wno-UNUSED -Wno-WIDTH" plus
-the list shown for Wno-style.
+-Wno-PINMISSING -Wno-SYNCASYNCNET -Wno-UNDRIVEN -Wno-UNSIGNED -Wno-UNUSED
+-Wno-WIDTH" plus the list shown for Wno-style.
 
 It is strongly recommended you cleanup your code rather than using this
 option, it is only intended to be use when running test-cases of code
@@ -939,8 +942,8 @@ received from third parties.
 
 Disable all code style related warning messages (note by default they are
 already disabled).  This is equivalent to "-Wno-DECLFILENAME -Wno-DEFPARAM
--Wno-INCABSPATH -Wno-SYNCASYNCNET -Wno-UNDRIVEN -Wno-UNUSED
--Wno-VARHIDDEN".
+-Wno-INCABSPATH -Wno-PINNOCONNECT -Wno-SYNCASYNCNET -Wno-UNDRIVEN
+-Wno-UNUSED -Wno-VARHIDDEN".
 
 =item -Wno-fatal
 
@@ -960,13 +963,14 @@ Enable all lint related warning messages (note by default they are already
 enabled), but do not affect style messages.  This is equivalent to
 "-Wwarn-CASEINCOMPLETE -Wwarn-CASEOVERLAP -Wwarn-CASEX -Wwarn-CASEWITHX
 -Wwarn-CMPCONST -Wwarn-ENDLABEL -Wwarn-IMPLICIT -Wwarn-LITENDIAN
--Wwarn-REALCVT -Wwarn-UNSIGNED -Wwarn-WIDTH".
+-Wwarn-PINMISSING -Wwarn-REALCVT -Wwarn-UNSIGNED -Wwarn-WIDTH".
 
 =item -Wwarn-style
 
 Enable all code style related warning messages.  This is equivalent to
 "-Wwarn ASSIGNDLY -Wwarn-DECLFILENAME -Wwarn-DEFPARAM -Wwarn-INCABSPATH
--Wwarn-SYNCASYNCNET -Wwarn-UNDRIVEN -Wwarn-UNUSED -Wwarn-VARHIDDEN".
+-Wwarn-PINNOCONNECT -Wwarn-SYNCASYNCNET -Wwarn-UNDRIVEN -Wwarn-UNUSED
+-Wwarn-VARHIDDEN".
 
 =item -x-assign 0
 
@@ -2209,45 +2213,47 @@ optimizations will be disabled around the latch.
 
 All delays (#) are ignored, as they are in synthesis.
 
-=head2 Two State
+=head2 Unknown states
 
-Verilator is a two state simulator, not a four state simulator.  However, it
-has two features which uncover most initialization bugs (including many that
-a four state simulator will miss.)
-
-First, assigning a variable to a X will actually assign the variable to a
-random value (see the -x-assign switch.)  Thus if the value is actually
-used, the random value should cause downstream errors.  Integers also
-randomize, even though the Verilog 2001 specification says they initialize
-to zero.
+Verilator is mostly a two state simulator, not a four state simulator.
+However, it has two features which uncover most initialization bugs
+(including many that a four state simulator will miss.)
 
 Identity comparisons (=== or !==) are converted to standard ==/!== when
 neither side is a constant.  This may make the expression result differ
-from a four state simulator.
+from a four state simulator.  An === comparison to X will always be false,
+so that Verilog code which checks for uninitialized logic will not fire.
 
-All variables are initialized using a function.  By running several
-random simulation runs you can determine that reset is working correctly.
-On the first run, the function initializes variables to zero.  On the
-second, have it initialize variables to one.  On the third and following
-runs have it initialize them randomly.  If the results match, reset works.
-(Note this is what the hardware will really do.)  In practice, just setting
-all variables to one at startup finds most problems.
+Assigning a variable to a X will actually assign the variable to a random
+value (see the -x-assign switch.)  Thus if the value is actually used, the
+random value should cause downstream errors.  Integers also randomize, even
+though the Verilog 2001 specification says they initialize to zero.
+
+All variables are randomly initialized using a function.  By running
+several random simulation runs you can determine that reset is working
+correctly.  On the first run, the function initializes variables to zero.
+On the second, have it initialize variables to one.  On the third and
+following runs have it initialize them randomly.  If the results match,
+reset works.  (Note this is what the hardware will really do.)  In
+practice, just setting all variables to one at startup finds most problems.
 
 =head2 Tri/Inout
 
-Verilator converts some simple tristate structures into two state. An assignment
-of the form:
+Verilator converts some simple tristate structures into two state.  Pullup,
+pulldown, bufif0, bufif1, notif0, notif1, pmos, nmos, tri0 and tri1 are
+also supported.  Simple comparisons with === 1'bz are also supported.
+
+An assignment of the form:
 
     inout driver;
     wire driver = (enable) ? output_value : 1'bz;
 
 Will be converted to
 
-    input driver__in;     // Value being driven in from "external" drivers
-    output driver__en;    // True if driven from this module
-    output driver__enout; // Value being driven from this module
+    input driver;       // Value being driven in from "external" drivers
+    output driver__en;  // True if driven from this module
+    output driver__out; // Value being driven from this module
 
-Pullup, pulldown, bufif0, bufif1, notif0, notif1 are also supported.
 External logic will be needed to combine these signals with any external
 drivers.
 
@@ -2712,6 +2718,15 @@ command line to specify the top include source directory.
 Disabled by default as this is a code style warning; it will simulate
 correctly.
 
+=item INITIALDLY
+
+Warns that you have a delayed assignment inside of an initial or final
+block.  If this message is suppressed, Verilator will convert this to a
+non-delayed assignment.  See also the COMBDLY warning.
+
+Ignoring this warning may make Verilator simulations differ from other
+simulators.
+
 =item LITENDIAN
 
 Warns that a vector is declared with little endian bit numbering
@@ -2748,6 +2763,23 @@ Often this error is because some low level cell is being read in, but is
 not really needed.  The best solution is to insure that each module is in a
 unique file by the same name.  Otherwise, make sure all library files are
 read in as libraries with -v, instead of automatically with -y.
+
+=item PINMISSING
+
+Warns that a module has a pin which is not mentioned in a cell
+instantiation.  If a pin is not missing it should still be specified on the
+cell declaration with a empty connection,using "(.pin_name())".
+
+Ignoring this warning will only suppress the lint check, it will simulate
+correctly.
+
+=item PINNOCONNECT
+
+Warns that a cell instantiation has a pin which is not connected to another
+signal.
+
+Disabled by default as this is a code style warning; it will simulate
+correctly.
 
 =item REALCVT
 
@@ -3395,12 +3427,27 @@ follows:
     cp -p t/t_EXAMPLE.pl t/t_BUG.pl
     cp -p t/t_EXAMPLE.v t/t_BUG.v
 
+There are many hits on how to write a good test in the driver.pl
+documentation which can be seen by running:
+
+    cd $VERILATOR_ROOT  # Need the original distribution kit
+    test_regress/driver.pl --help
+
 Edit t/t_BUG.pl to suit your example; you can do anything you want in the
 Verilog code there; just make sure it retains the single clk input and no
 outputs.  Now, the following should fail:
 
+    cd $VERILATOR_ROOT  # Need the original distribution kit
     cd test_regress
-    t/t_BUG.pl
+    t/t_BUG.pl  # Run on Verilator
+    t/t_BUG.pl --debug # Run on Verilator, passing --debug to Verilator
+    t/t_BUG.pl --vcs  # Run on a commercial simulator
+    t/t_BUG.pl --nc|--iv|--ghdl  # Likewise on other simulators
+
+The test driver accepts a number of options, many of which mirror the main
+Verilator option. For example the previous test could have been run with
+debugging enabled.  The full set of test options can be seen by running
+driver.pl --help as shown above.
 
 Finally, report the bug using the bug tracker at
 L<http://www.veripool.org/verilator>.  The bug will become publicly
@@ -3445,9 +3492,9 @@ Many people have provided ideas and other assistance with Verilator.
 
 The major corporate sponsors of Verilator, by providing significant
 contributions of time or funds include include Cavium Networks, Compaq
-Corporation, Digital Equipment Corporation, Embecosm Ltd., Intel
-Corporation, Mindspeed Technologies Inc., MicroTune Inc., picoChip Designs
-Ltd., Sun Microsystems, Nauticus Networks, and SiCortex Inc.
+Corporation, Digital Equipment Corporation, Embecosm Ltd., Hicamp Systems,
+Intel Corporation, Mindspeed Technologies Inc., MicroTune Inc., picoChip
+Designs Ltd., Sun Microsystems, Nauticus Networks, and SiCortex Inc.
 
 The people who have contributed major functionality are Byron Bradley,
 Jeremy Bennett, Lane Brooks, Duane Galbi, Paul Wasson, and Wilson Snyder.

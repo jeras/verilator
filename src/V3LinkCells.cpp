@@ -176,6 +176,13 @@ private:
 	m_modp = NULL;
     }
 
+    virtual void visit(AstPackageImport* nodep, AstNUser*) {
+	// Package Import: We need to do the package before the use of a package
+	nodep->iterateChildren(*this);
+	if (!nodep->packagep()) nodep->v3fatalSrc("Unlinked package");  // Parser should set packagep
+	new V3GraphEdge(&m_graph, vertex(m_modp), vertex(nodep->packagep()), 1, false);
+    }
+
     virtual void visit(AstCell* nodep, AstNUser*) {
 	// Cell: Resolve its filename.  If necessary, parse it.
 	if (!nodep->modp()) {
@@ -227,12 +234,19 @@ private:
 		pinp->unlinkFrBack()->deleteTree(); pinp=NULL;
 	    }
 	}
-	if (nodep->modp() && pinStar) {
+	// Convert unnamed pins to pin number based assignments
+	for (AstPin* pinp = nodep->pinsp(); pinp; pinp=pinp->nextp()->castPin()) {
+	    if (pinp->name()=="") pinp->name("__pinNumber"+cvtToStr(pinp->pinNum()));
+	}
+	for (AstPin* pinp = nodep->paramsp(); pinp; pinp=pinp->nextp()->castPin()) {
+	    if (pinp->name()=="") pinp->name("__paramNumber"+cvtToStr(pinp->pinNum()));
+	}
+	if (nodep->modp()) {
 	    // Note what pins exist
-	    UINFO(9,"  CELL .* connect "<<nodep<<endl);
 	    V3SymTable  ports;	// Symbol table of all connected port names
 	    for (AstPin* pinp = nodep->pinsp(); pinp; pinp=pinp->nextp()->castPin()) {
 		if (pinp->name()=="") pinp->v3error("Connect by position is illegal in .* connected cells");
+		if (!pinp->exprp()) pinp->v3warn(PINNOCONNECT,"Cell pin is not connected: "<<pinp->prettyName());
 		if (!ports.findIdFlat(pinp->name())) {
 		    ports.insert(pinp->name(), pinp);
 		}
@@ -241,23 +255,23 @@ private:
 	    // and it's easier to do it now than in V3Link when we'd need to repeat steps.
 	    for (AstNode* portnodep = nodep->modp()->stmtsp(); portnodep; portnodep=portnodep->nextp()) {
 		if (AstPort* portp = portnodep->castPort()) {
-		    if (!ports.findIdFlat(portp->name())) {
-			UINFO(9,"    need PORT  "<<portp<<endl);
-			// Create any not already connected
-			AstPin* newp = new AstPin(nodep->fileline(),0,portp->name(),
-						  new AstVarRef(nodep->fileline(),portp->name(),false));
-			newp->svImplicit(true);
-			nodep->addPinsp(newp);
+		    if (!ports.findIdFlat(portp->name())
+			&& !ports.findIdFlat("__pinNumber"+cvtToStr(portp->pinNum()))) {
+			if (pinStar) {
+			    UINFO(9,"    need .* PORT  "<<portp<<endl);
+			    // Create any not already connected
+			    AstPin* newp = new AstPin(nodep->fileline(),0,portp->name(),
+						      new AstVarRef(nodep->fileline(),portp->name(),false));
+			    newp->svImplicit(true);
+			    nodep->addPinsp(newp);
+			} else {  // warn on the CELL that needs it, not the port
+			    nodep->v3warn(PINMISSING, "Cell has missing pin: "<<portp->prettyName());
+			    AstPin* newp = new AstPin(nodep->fileline(),0,portp->name(),NULL);
+			    nodep->addPinsp(newp);
+			}
 		    }
 		}
 	    }
-	}
-	// Convert unnamed pins to pin number based assignments
-	for (AstPin* pinp = nodep->pinsp(); pinp; pinp=pinp->nextp()->castPin()) {
-	    if (pinp->name()=="") pinp->name("__pinNumber"+cvtToStr(pinp->pinNum()));
-	}
-	for (AstPin* pinp = nodep->paramsp(); pinp; pinp=pinp->nextp()->castPin()) {
-	    if (pinp->name()=="") pinp->name("__paramNumber"+cvtToStr(pinp->pinNum()));
 	}
 	if (nodep->modp()) {
 	    nodep->iterateChildren(*this);

@@ -3,14 +3,44 @@ Revision history for Verilator
 The contributors that suggested a given feature are shown in [].  [by ...]
 indicates the contributor was also the author of the fix; Thanks!
 
+* Verilator 3.840 devel
 
-* Verilator 3.833 devel
+**    Rewrote tristate handling; supports tri0, tri1, tristate bit selects,
+      concatenates and pullup/pulldowns, bug395, bug56, bug54, bug51.
+      [Alex Solomatnikov, Lane Brooks, et al]
+
+**    Major internal changes to support future complex data types.
+
+***   Support tri0 and tri1, bug462.  [Alex Solomatnikov]
+
+***   Support nmos and pmos, bug488.  [Alex Solomatnikov]
+
+***   Add INITIALDLY warning on initial assignments, bug478.  [Alex Solomatnikov]
+
+***   Add PINMISSING and PINNOCONNECT lint checks.
+
+***   Fix generate operators not short circuiting, bug413.  [by Jeremy Bennett]
+
+***   Fix parameters not supported in constant functions, bug474. [Alex Solomatnikov]
+
+****  Fix ITOD internal error on real conversions, bug491.  [Alex Solomatnikov]
+
+****  Fix input and real loosing real data type, bug501.  [Alex Solomatnikov]
+
+****  Fix imports causing symbol table error, bug490.  [Alex Solomatnikov]
+
+****  Fix newlines in radix values, bug507. [Walter Lavino]
+
+
+* Verilator 3.833 2012/04/15
 
 ***   Support += and -= in standard for loops, bug463. [Alex Solomatnikov]
 
 ***   Fix processing unused parametrized modules, bug469, bug470.  [Alex Solomatnikov]
 
 ****  Add SELRANGE as warning instead of error, bug477. [Alex Solomatnikov]
+
+****  Add readme.pdf and internal.pdf and doxygen, bug483.  [by Jeremy Bennett]
 
 ****  Fix change detections on arrays, bug364.  [John Stevenson, Alex Solomatnikov]
 
