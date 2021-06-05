@@ -28,16 +28,16 @@ module t (/*AUTOARG*/);
 
    // ALU operation enumeration {func7[5], func3}
    typedef enum alu_t {
-      AO_ADD  = {1'b0, ADD },  // addition
-      AO_SUB  = {1'b1, ADD },  // subtraction
-      AO_SLL  = {1'b?, SL  },  // shift left logical
-      AO_SLT  = {1'b?, SLT },  // set less then   signed (not greater then or equal)
-      AO_SLTU = {1'b?, SLTU},  // set less then unsigned (not greater then or equal)
-      AO_XOR  = {1'b?, XOR },  // logic XOR
-      AO_SRL  = {1'b0, SR  },  // shift right logical
-      AO_SRA  = {1'b1, SR  },  // shift right arithmetic
-      AO_OR   = {1'b?, OR  },  // logic OR
-      AO_AND  = {1'b?, AND }   // logic AND
+      AO_ADD  = '{1'b0, ADD },  // addition
+      AO_SUB  = '{1'b1, ADD },  // subtraction
+      AO_SLL  = '{1'b?, SL  },  // shift left logical
+      AO_SLT  = '{1'b?, SLT },  // set less then   signed (not greater then or equal)
+      AO_SLTU = '{1'b?, SLTU},  // set less then unsigned (not greater then or equal)
+      AO_XOR  = '{1'b?, XOR },  // logic XOR
+      AO_SRL  = '{1'b0, SR  },  // shift right logical
+      AO_SRA  = '{1'b1, SR  },  // shift right arithmetic
+      AO_OR   = '{1'b?, OR  },  // logic OR
+      AO_AND  = '{1'b?, AND }   // logic AND
    } alu_et;
 
    // enumerated command
