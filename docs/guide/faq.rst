@@ -58,8 +58,8 @@ How can it be faster than (name-a-big-3-closed-source-simulator)?
 Generally, the implied part of the question is "... with all of the
 manpower they can put into developing it."
 
-Most simulators have to be compliant with the complete IEEE 1364 (Verilog)
-and IEEE 1800 (SystemVerilog) standards, meaning they have to be event
+Most simulators have to be compliant with the complete IEEE 1364 (Verilog_)
+and IEEE 1800 (SystemVerilog_) standards, meaning they have to be event
 driven.  This prevents them from being able to reorder blocks and make
 netlist-style optimizations, which are where most of the gains come from.
 
@@ -68,11 +68,15 @@ compliant with the whole standard to start with, so your simulator need not
 be either.  Verilator is closer to the synthesis interpretation, so this is
 a good thing for getting working silicon.
 
+.. _Verilog: https://ieeexplore.ieee.org/document/1620780
+.. _SystemVerilog: https://ieeexplore.ieee.org/document/8299595
+
 
 Will Verilator output remain under my own license/copyright?
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-Your SystemVerilog, VPI/DPI, or main() C++ code remains under your own license.
+Your SystemVerilog, VPI/DPI, or main() C++ code remains under your own
+license.
 
 It's just like how using GCC on your programs does not change the copyright
 of your program; this is why Verilator uses the "GNU **Lesser** Public
@@ -129,15 +133,16 @@ How do I generate waveforms (traces) in C++?
 See also the next question for tracing in SystemC mode.
 
 A. Pass the :vlopt:`--trace` option to Verilator, and in your top level C
-   code, call ``Verilated::traceEverOn(true)``.  Then you may use
-   ``$dumpfile`` and ``$dumpvars`` to enable traces, same as with any
-   Verilog simulator. See ``examples/make_tracing_c`` in the distribution.
+   code, call :code:`Verilated::traceEverOn(true)`.  Then you may use
+   :code:`$dumpfile` and :code:`$dumpvars` to enable traces, same as with
+   any Verilog simulator. See :file:`examples/make_tracing_c` in the
+   distribution.
 
 B. Or, for finer-grained control, or C++ files with multiple Verilated
    modules you may also create the trace purely from C++.  Create a
-   VerilatedVcdC object, and in your main loop right after ``eval()`` call
-   ``trace_object->dump(contextp->time())`` every time step, and finally
-   call ``trace_object->close()``.
+   :code:`VerilatedVcdC` object, and in your main loop right after
+   :code:`eval()` call :code:`trace_object->dump(contextp->time())`
+   every time step, and finally call :code:`trace_object->close()`.
 
    .. code-block:: C++
       :emphasize-lines: 1,5-8,12
@@ -176,21 +181,21 @@ How do I generate waveforms (traces) in SystemC?
 
 A. Pass the :vlopt:`--trace` option to Verilator, and in your top level
    :code:`sc_main()`, call :code:`Verilated::traceEverOn(true)`.  Then you
-   may use :code:`$dumpfile` and code:`$dumpvars` to enable traces, same as
+   may use :code:`$dumpfile` and :code:`$dumpvars` to enable traces, same as
    with any Verilog simulator, see the non-SystemC example in
    :file:`examples/make_tracing_c`. This will trace only the module
-   containing the :code:`$dumpvar`.
+   containing the :code:`$dumpvars`.
 
 B. Or, you may create a trace purely from SystemC, which may trace all
-   Verilated designs in the SystemC model. Create a VerilatedVcdSc object
-   as you would create a normal SystemC trace file.  For an example, see
-   the call to ``VerilatedVcdSc`` in the
+   Verilated designs in the SystemC model. Create a :code:`VerilatedVcdSc`
+   object as you would create a normal SystemC trace file.  For an example,
+   see the call to :code:`VerilatedVcdSc` in the
    :file:`examples/make_tracing_sc/sc_main.cpp` file of the distribution,
    and below.
 
 C. Alternatively you may use the C++ trace mechanism described in the
-   previous question, note the timescale and timeprecision will be
-   inherited from your SystemC settings.
+   previous question, note the :code:`timescale` and :code:`timeprecision`
+   will be inherited from your SystemC settings.
 
    .. code-block:: C++
       :emphasize-lines: 1,5-8
@@ -210,7 +215,6 @@ C. Alternatively you may use the C++ trace mechanism described in the
       }
 
 
-
 You also need to compile :file:`verilated_vcd_sc.cpp` and
 :file:`verilated_vcd_c.cpp` and add them to your link, preferably by adding
 the dependencies in your Makefile's :code:`$(VK_GLOBAL_OBJS)` link rule.
@@ -223,16 +227,16 @@ When using SystemC 2.3, the SystemC library must have been built with the
 experimental simulation phase callback based tracing disabled. This is
 disabled by default when building SystemC with its configure based build
 system, but when building SystemC with CMake, you must pass
-``-DENABLE_PHASE_CALLBACKS_TRACING=OFF`` to disable this feature.
+:code:`-DENABLE_PHASE_CALLBACKS_TRACING=OFF` to disable this feature.
 
 
 How do I generate FST waveforms (traces) in C++ or SystemC?
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-FST is a trace file format developed by GTKWave.  Verilator provides basic
+FST is a trace file format developed by GTKWave. Verilator provides basic
 FST support.  To dump traces in FST format, add the :vlopt:`--trace-fst`
-option to Verilator and either A. use :code:`$dumpfile & $dumpvars` in
-Verilog as described in the VCD example above,
+option to Verilator and either use :code:`$dumpfile` and :code:`$dumpvars` in
+Verilog as described in the VCD example above.
 
 Or, in C++ change the include described in the VCD example above:
 
@@ -251,18 +255,22 @@ Or, in SystemC change the include described in the VCD example above:
 
 
 Note that currently supporting both FST and VCD in a single simulation is
-impossible, but such requirement should be rare.  You can however ifdef
-around the trace format in your C++ main loop, and select VCD or FST at
-build time, should you require.
+impossible, but such requirement should be rare. You can however use
+:code:`\`ifdef` around the trace format in your C++ main loop,
+and select VCD or FST at build time, should you require.
 
 
 How do I view waveforms (aka dumps or traces)?
 """"""""""""""""""""""""""""""""""""""""""""""
 
-Verilator creates standard VCD (Value Change Dump) and FST files.  VCD
-files are viewable with the open source GTKWave (recommended) or Dinotrace
-(legacy) programs, or any of the many closed-source offerings; FST is
-supported only by GTKWave.
+Verilator creates standard VCD (Value Change Dump) and FST files. VCD
+files are viewable with the open source `GTKWave`_ (recommended), `Dinotrace`_
+(legacy), `VCDrom`_ programs, or any of the many closed-source offerings;
+FST is supported only by `GTKWave`_.
+
+.. _GTKWave: https://gtkwave.sourceforge.net/
+.. _Dinotrace: https://github.com/veripool/dinotrace
+.. _VCDrom: https://github.com/wavedrom/vcdrom
 
 
 How do I speed up writing large waveform (trace) files?
@@ -289,14 +297,14 @@ E. Be sure you write your trace files to a local solid-state drive, instead
    of to a network drive.  Network drives are generally far slower.
 
 
-Where is the translate_off command?  (How do I ignore a construct?)
-"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Where is the ``translate_off`` command?  (How do I ignore a construct?)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 Translate on/off pragmas are generally a bad idea, as it's easy to have
 mismatched pairs, and you can't see what another tool sees by just
 preprocessing the code.  Instead, use the preprocessor; Verilator defines
-the ``\`VERILATOR`` define for you, so just wrap the code in an ifndef
-region:
+the :code:``VERILATOR` define for you, so just wrap the code in an
+:code:``ifndef` region:
 
  .. code-block:: sv
     :emphasize-lines: 1
@@ -305,7 +313,7 @@ region:
        Something_Verilator_Dislikes;
     `endif
 
-Most synthesis tools similarly define SYNTHESIS for you.
+Most synthesis tools similarly define :code:`SYNTHESIS` for you.
 
 
 Why do I get "unexpected 'do'" or "unexpected 'bit'" errors?
@@ -315,7 +323,8 @@ The words \ ``do``\ , \ ``bit``\ , \ ``ref``\ , \ ``return``\ , and others
 are reserved keywords in SystemVerilog.  Older Verilog code might use these
 as identifiers.  You should change your code to not use them to ensure it
 works with newer tools.  Alternatively, surround them by the Verilog
-2005/SystemVerilog begin_keywords pragma to indicate Verilog 2001 code.
+2005/SystemVerilog :code:``begin_keywords` / :code:``end_keywords` pragma
+to indicate Verilog 2001 code.
 
 .. code-block:: sv
    :emphasize-lines: 1
@@ -354,7 +363,7 @@ Why do I get "undefined reference to \`VL_RAND_RESET_I' or \`Verilated::...'"?
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 You need to link your compiled Verilated code against the
-:code:`verilated.cpp` file found in the include directory of the Verilator
+:file:`verilated.cpp` file found in the include directory of the Verilator
 kit.  This is one target in the ``$(VK_GLOBAL_OBJS)`` make variable, which
 should be part of your Makefile's link rule.  If you use :vlopt:`--exe`,
 this is done for you.
@@ -363,15 +372,16 @@ this is done for you.
 Is the PLI supported?
 """""""""""""""""""""
 
-Only somewhat.  More specifically, the common PLI-ish calls $display,
-$finish, $stop, $time, $write are converted to C++ equivalents.  You can
-also use the "import DPI" SystemVerilog feature to call C code (see the
-chapter above).  There is also limited VPI access to public signals.
+Only somewhat.  More specifically, the common PLI-ish calls :code:`$display`,
+:code:`$finish`, :code:`$stop`, :code:`$time`, :code:`$write`` are
+converted to C++ equivalents. You can also use the :code:`import DPI`
+SystemVerilog feature to call C code (see the chapter above).
+There is also limited VPI access to public signals.
 
 If you want something more complex, since Verilator emits standard C++
 code, you can write your own C++ routines that can access and modify signal
 values without needing any PLI interface code, and call it with
-$c("{any_c++_statement}").
+:code"`$c("{any_c++_statement}")`.
 
 See the :ref:`Connecting` section.
 
@@ -388,22 +398,22 @@ example of how to do this.
 How do I get faster build times?
 """"""""""""""""""""""""""""""""
 
-* When running make, pass the make variable VM_PARALLEL_BUILDS=1 so that
+* When running make, pass the make variable ``VM_PARALLEL_BUILDS=1`` so that
   builds occur in parallel. Note this is now set by default if an output
   file was large enough to be split due to the :vlopt:`--output-split`
   option.
 
 * Verilator emits any infrequently executed "cold" routines into separate
-  __Slow.cpp files. This can accelerate compilation as optimization can be
-  disabled on these routines. See the OPT_FAST and OPT_SLOW make variables
-  and :ref:`Benchmarking & Optimization`.
+  :file:`__Slow.cpp` files. This can accelerate compilation as optimization
+  can be disabled on these routines. See the ``OPT_FAST`` and ``OPT_SLOW``
+  make variables and :ref:`Benchmarking & Optimization`.
 
-* Use a recent compiler.  Newer compilers tend to be faster.
+* Use a recent compiler. Newer compilers tend to be faster.
 
 * Compile in parallel on many machines and use caching; see the web for the
   ccache, distcc and icecream packages. ccache will skip GCC runs between
   identical source builds, even across different users.  If ccache was
-  installed when Verilator was built it is used, or see OBJCACHE
+  installed when Verilator was built it is used, or see ``OBJCACHE``
   environment variable to override this. Also see the
   :vlopt:`--output-split` option and :ref: `Profiling ccache efficiency`
 
@@ -457,30 +467,33 @@ be accessing with a :option:`/*verilator&32;public*/` metacomment before
 the closing semicolon.  Then scope into the C++ class to read the value of
 the signal, as you would any other member variable.
 
-Signals are the smallest of 8-bit unsigned chars (equivalent to uint8_t),
-16-bit unsigned shorts (uint16_t), 32-bit unsigned longs (uint32_t), or
-64-bit unsigned long longs (uint64_t) that fits the width of the signal.
-Generally, you can use just uint32_t's for 1 to 32 bits, or uint64_t for
-1 to 64 bits, and the compiler will properly up-convert smaller entities.
-Note even signed ports are declared as unsigned; you must sign extend
-yourself to the appropriate signal width.
+Signals are the smallest of 8-bit :code:`unsigned char`s (equivalent to
+:code:`uint8_t`), 16-bit :code:`unsigned short`s (:code:`uint16_t)`,
+32-bit :code:`unsigned long`s (:code:`uint32_t`), or 64-bit
+:code:`unsigned long long`s (:code:`uint64_t)`` that fits the width of
+the signal.
+Generally, you can use just :code:`uint32_t`s for 1 to 32 bits,
+or :code:`uint64_t`` for 1 to 64 bits, and the compiler will properly
+up-convert smaller entities. Note even signed ports are declared as
+:code:`unsigned`; you must sign extend yourself to the appropriate signal
+width.
 
-Signals wider than 64 bits are stored as an array of 32-bit uint32_t's.
-Thus to read bits 31:0, access signal[0], and for bits 63:32, access
-signal[1].  Unused bits (for example bit numbers 65-96 of a 65-bit vector)
-will always be zero.  If you change the value you must make sure to pack
+Signals wider than 64 bits are stored as an array of 32-bit :code:`uint32_t`s.
+Thus to read bits 31:0, access :code:`signal[0]`, and for bits 63:32, access
+:code:`signal[1]`.  Unused bits (for example bit numbers 65-96 of a 65-bit
+vector) will always be zero. If you change the value you must make sure to pack
 zeros in the unused bits or core-dumps may result, because Verilator strips
 array bound checks where it believes them to be unnecessary to improve
 performance.
 
-In the SYSTEMC example above, if you had in our.v:
+In the SystemC example above, if you had in :file:`our.v`:
 
  .. code-block:: sv
 
       input clk /*verilator public*/;
       // Note the placement of the semicolon above
 
-From the sc_main.cpp file, you'd then:
+From the :file:`sc_main.cpp` file, you'd then:
 
  .. code-block:: C++
 
