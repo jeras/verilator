@@ -543,7 +543,7 @@ public:
                 puts(protect(nodep->fileline()->filename()));
                 puts(":");
                 puts(cvtToStr(nodep->fileline()->lineno()));
-                puts(": $dumpvar ignored, as Verilated without --trace");
+                puts(": $dumpvars ignored, as Verilated without --trace");
                 puts("\\n\");\n");
             }
             break;
