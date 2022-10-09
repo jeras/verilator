@@ -316,14 +316,14 @@ the :code:``VERILATOR` define for you, so just wrap the code in an
 Most synthesis tools similarly define :code:`SYNTHESIS` for you.
 
 
-Why do I get "unexpected 'do'" or "unexpected 'bit'" errors?
-""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Why do I get :command:`unexpected 'do'` or :command:`unexpected 'bit'` errors?
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-The words \ ``do``\ , \ ``bit``\ , \ ``ref``\ , \ ``return``\ , and others
+The words :code:`do`, :code:`bit`, :code:`ref`, :code:`return`, and others
 are reserved keywords in SystemVerilog.  Older Verilog code might use these
 as identifiers.  You should change your code to not use them to ensure it
 works with newer tools.  Alternatively, surround them by the Verilog
-2005/SystemVerilog :code:``begin_keywords` / :code:``end_keywords` pragma
+2005/SystemVerilog :code:`&96;begin_keywords` / :code:`&96;end_keywords` pragma
 to indicate Verilog 2001 code.
 
 .. code-block:: sv
