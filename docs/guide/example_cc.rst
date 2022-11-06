@@ -50,13 +50,13 @@ Breaking this command down:
 #. :vlopt:`--cc` to get C++ output (versus e.g. SystemC
    or only linting).
 
-#. :vlopt:`--exe`, along with our :command:`sim_main.cpp` wrapper file, so
+#. :vlopt:`--exe`, along with our :file:`sim_main.cpp` wrapper file, so
    the build will create an executable instead of only a library.
 
 #. :vlopt:`--build` so Verilator will call make itself. This is we don't
    need to manually call make as a separate step. You can also write your
    own compile rules, and run make yourself as we show in :ref:`Example
-   SystemC Execution`.)
+   SystemC Execution`.
 
 #. :vlopt:`-j` `0' to Verilate using use as many CPU threads as the machine
    has.
@@ -64,7 +64,7 @@ Breaking this command down:
 #. :vlopt:`-Wall` so Verilator has stronger lint warnings
    enabled.
 
-#. An finally, :command:`our.v` which is our SystemVerilog design file.
+#. An finally, :file:`our.v` which is our SystemVerilog design file.
 
 Once Verilator completes we can see the generated C++ code under the
 :file:`obj_dir` directory.
